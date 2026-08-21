@@ -1,0 +1,48 @@
+# ---- Secrets & confidential source material (NEVER commit) ----
+.env
+.env.*
+!.env.example
+*.bak
+intro.txt
+cred.txt
+PEMS doc/
+*.pdf
+*.xlsb
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Node / frontend ----
+node_modules/
+.vite/
+*.local
+# NOTE: frontend/dist IS committed on purpose, so the app runs from a ZIP download
+# with only a .env (no Node / npm build needed on the server). Rebuild + commit it
+# after any UI change: `cd frontend && npm run build`.
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# ---- Editors / OS ----
+.claude/settings.local.json
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- Logs / runtime ----
+*.log
+logs/
+/exports/
+
+# encryption key for at-rest secrets (SAP password)
+backend/.pems_secret.key
+.pems_secret.key
