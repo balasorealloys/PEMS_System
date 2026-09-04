@@ -5,6 +5,7 @@ import Icon from "../components/Icon";
 import CostCenterMap from "./CostCenterMap";
 import SldTree from "./SldTree";
 import FeederTable from "../components/FeederTable";
+import { LoadingState } from "../components/premium";
 
 type Filter = "all" | "unmapped" | "unconfirmed" | "mapped";
 
@@ -14,6 +15,7 @@ export default function FeederMapping() {
   const [meters, setMeters] = useState<Meter[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setViewState] = useState<"table" | "map" | "sld">(
     () => (localStorage.getItem("pems.map.view") as "table" | "map" | "sld") || "sld");
@@ -36,7 +38,7 @@ export default function FeederMapping() {
       const [s, m] = await Promise.all([api.summary(), api.meters()]);
       setSummary(s);
       setMeters(m);
-    } catch (e) { setError(String(e)); }
+    } catch (e) { setError(String(e)); } finally { setLoading(false); }
   }
 
   useEffect(() => { api.loads().then(setLoads).catch((e) => setError(String(e))); }, []);
@@ -99,22 +101,26 @@ export default function FeederMapping() {
         </div>
       )}
 
-      <div className="toolbar">
-        <div className="tabs">
-          {(["all", "unmapped", "unconfirmed", "mapped"] as Filter[]).map((f) => (
-            <button key={f} className={`tab ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
-              {f[0].toUpperCase() + f.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {error && <div className="error">{error}</div>}
 
-      <FeederTable
-        meters={filtered} loads={loads} busy={busy}
-        onAssign={assign} onConfirm={confirmOne}
-      />
+      {loading ? <LoadingState label="Loading feeder mappings…" /> : (
+        <>
+          <div className="toolbar">
+            <div className="tabs">
+              {(["all", "unmapped", "unconfirmed", "mapped"] as Filter[]).map((f) => (
+                <button key={f} className={`tab ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
+                  {f[0].toUpperCase() + f.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <FeederTable
+            meters={filtered} loads={loads} busy={busy}
+            onAssign={assign} onConfirm={confirmOne}
+          />
+        </>
+      )}
     </div>
   );
 }

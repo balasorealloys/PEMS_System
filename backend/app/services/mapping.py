@@ -12,6 +12,8 @@ from datetime import date
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.services.plant import MAIN as MAIN_INCOMER  # 132 kV grid incomer, from config
+
 
 def list_cost_centers(db: Session) -> list[dict]:
     rows = db.execute(text(
@@ -120,7 +122,11 @@ def mapping_tree(db: Session) -> dict:
     s = get_settings()
     vd = f"em_valuedata_{s.client_id.lower()}"
 
-    latest = db.execute(text(f"SELECT MAX(DateTimeStamp) FROM {vd}")).scalar()
+    # filtered by the main incomer so this uses the (DeviceID, FeederID, DateTimeStamp)
+    # primary key index — an unfiltered MAX() over the ~20M-row table is a full scan.
+    latest = db.execute(text(
+        f"SELECT MAX(DateTimeStamp) FROM {vd} WHERE DeviceID=:d AND FeederID=:f"
+    ), {"d": MAIN_INCOMER[0], "f": MAIN_INCOMER[1]}).scalar()
     kw: dict[tuple[str, int], float] = {}
     if latest:
         since = latest - timedelta(minutes=15)
@@ -206,7 +212,11 @@ def sld_tree(db: Session) -> dict:
     def norm(x: str) -> str:
         return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]", " ", (x or "").lower())).strip()
 
-    latest = db.execute(text(f"SELECT MAX(DateTimeStamp) FROM {vd}")).scalar()
+    # filtered by the main incomer so this uses the (DeviceID, FeederID, DateTimeStamp)
+    # primary key index — an unfiltered MAX() over the ~20M-row table is a full scan.
+    latest = db.execute(text(
+        f"SELECT MAX(DateTimeStamp) FROM {vd} WHERE DeviceID=:d AND FeederID=:f"
+    ), {"d": MAIN_INCOMER[0], "f": MAIN_INCOMER[1]}).scalar()
     kw: dict[tuple[str, int], float] = {}
     if latest:
         since = latest - timedelta(minutes=15)

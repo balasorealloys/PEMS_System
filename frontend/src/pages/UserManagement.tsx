@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Search, Shield, ShieldCheck, Trash2, User, UserPlus } from "lucide-react";
 import { api, type EmployeeHit, type RoleRow } from "../api";
-import { Card, CardHead, CardBody } from "../components/premium";
+import { Card, CardHead, CardBody, LoadingState } from "../components/premium";
 import { cn } from "../lib/utils";
 
 const ROLES = [
@@ -111,7 +111,7 @@ export default function UserManagement() {
       <Card>
         <CardHead title="Assigned roles" icon={<Shield size={16} />} right={<span className="text-xs text-muted-foreground">{rows.length}</span>} />
         <CardBody className="px-0">
-          {loading ? <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div> : (
+          {loading ? <LoadingState label="Loading roles…" className="py-8" /> : (
             <table className="w-full text-sm">
               <thead><tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-5 pb-2 text-left font-medium">Employee</th>

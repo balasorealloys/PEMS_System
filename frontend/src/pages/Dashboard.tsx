@@ -7,7 +7,8 @@ import {
 import { api, type Executive } from "../api";
 import { useExecutive, useAlerts } from "../hooks/queries";
 import { useAuth } from "../stores/auth";
-import { KPICard, Card, CardHead, CardBody, EChart, StatusChip } from "../components/premium";
+import { useScope } from "../stores/scope";
+import { KPICard, Card, CardHead, CardBody, EChart, StatusChip, LoadingState } from "../components/premium";
 import type { Tone } from "../design-system/status";
 import { palette, axisColors } from "../design-system/charts";
 import { useThemeMode } from "../hooks/useThemeMode";
@@ -15,7 +16,10 @@ import { useThemeMode } from "../hooks/useThemeMode";
 const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 
 export default function Dashboard() {
-  const { data: d, error } = useExecutive();
+  const { range } = useScope();
+  // always follow the header date-range picker's full start–end scope; the backend
+  // aggregates over the whole window (a single day when start === end).
+  const { data: d, error } = useExecutive(range.start, range.end);
   const { data: alerts } = useAlerts();
   const firstName = titleCase((useAuth((s) => s.user)?.name || "").split(/\s+/)[0] || "there");
   const [costToday, setCostToday] = useState<number | null>(null);
@@ -23,10 +27,15 @@ export default function Dashboard() {
   const mode = useThemeMode();
 
   useEffect(() => {
+    setCostToday(null); setExpectedBill(null);
     if (!d?.date) return;
-    api.sapPreview(d.date.slice(0, 10)).then((p) => setCostToday(p.total_amount)).catch(() => {});
+    if (d.is_range && d.range) {
+      api.sapPreviewRange(d.range.start, d.range.end).then((p) => setCostToday(p.total_amount)).catch(() => {});
+    } else {
+      api.sapPreview(d.date.slice(0, 10)).then((p) => setCostToday(p.total_amount)).catch(() => {});
+    }
     api.recon(d.date.slice(0, 7)).then((r) => setExpectedBill(r.computed_total)).catch(() => {});
-  }, [d?.date]);
+  }, [d?.date, d?.is_range, d?.range?.start, d?.range?.end]);
 
   const spark = useMemo(
     () => (d ? d.demand_trend.filter((x) => x.today_mw != null).map((x) => x.today_mw) : []), [d]);
@@ -35,14 +44,24 @@ export default function Dashboard() {
   const feedersOpt = useMemo<EChartsOption | null>(() => (d ? buildFeeders(d, mode) : null), [d, mode]);
 
   if (error) return <div className="error">Failed to load dashboard: {String(error)}</div>;
-  if (!d) return <div className="muted">Loading live plant data…</div>;
+  if (!d) return <LoadingState label="Loading live plant data…" />;
+  if (d.as_of == null) {
+    return <div className="muted">No meter data for {d.range ? `${fmtDate(d.range.start)} – ${fmtDate(d.range.end)}` : "today"}.</div>;
+  }
+  const periodLabel = d.range ? `${fmtDate(d.range.start)} – ${fmtDate(d.range.end)}` : fmtDate(d.date!);
 
   return (
     <div className="space-y-4">
       <div className="page-head">
         <div>
-          <h1>{timeOfDayGreeting(d.as_of)}, {firstName} 👋</h1>
-          <div className="sub">Here's the live picture of your plant — {fmtDate(d.date)}.</div>
+          <h1>{d.is_range ? "Period Summary" : d.live ? timeOfDayGreeting(d.as_of) : "Snapshot"}, {firstName} 👋</h1>
+          <div className="sub">
+            {d.is_range
+              ? <>Summary for {periodLabel}{d.live ? " (in progress — today's data is still coming in)" : ""}.</>
+              : d.live
+                ? <>Here's the live picture of your plant — {periodLabel}.</>
+                : <>Historical snapshot for {periodLabel}.</>}
+          </div>
         </div>
         <div className="head-controls">
           <button className="btn primary"><Download size={15} /> Export</button>
@@ -51,21 +70,21 @@ export default function Dashboard() {
 
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KPICard label="Current Demand" tone="info" icon={<Zap size={17} />}
-          value={d.demand.mw} unit="MW" decimals={1} spark={spark}
+        <KPICard label={d.is_range ? "Demand (range end)" : "Current Demand"} tone="info" icon={<Zap size={17} />}
+          value={d.demand.mw} unit="MW" decimals={1} spark={d.is_range ? undefined : spark}
           footnote={<span>{d.demand.utilization_pct}% of {(d.demand.contract_kva / 1000).toFixed(0)} MVA</span>} />
         <KPICard label="Power Factor" tone={pfTone(d.power_factor)} icon={<Gauge size={17} />}
           value={d.power_factor ?? 0} decimals={3}
           footnote={<StatusChip tone={pfTone(d.power_factor)}>{pfLabel(d.power_factor)}</StatusChip>} />
-        <KPICard label="Today's Consumption" tone="info" icon={<Activity size={17} />}
+        <KPICard label={d.is_range ? "Period Consumption" : "Today's Consumption"} tone="info" icon={<Activity size={17} />}
           value={d.consumption.today_mwh ?? 0} unit="MWh" decimals={1} spark={spark}
-          delta={d.consumption.change_pct} deltaSuffix="vs yest" deltaGoodWhenUp={false} />
+          delta={d.consumption.change_pct} deltaSuffix={d.is_range ? "vs prev period" : "vs yest"} deltaGoodWhenUp={false} />
         <KPICard label="Load Factor" tone="success" icon={<BatteryCharging size={17} />}
-          value={d.load_factor ?? 0} decimals={2} footnote={<span>peak-adjusted, today</span>} />
-        <KPICard label="Energy Cost (Today)" tone="warning" icon={<IndianRupee size={17} />}
+          value={d.load_factor ?? 0} decimals={2} footnote={<span>peak-adjusted, {d.is_range ? "this period" : "today"}</span>} />
+        <KPICard label={d.is_range ? "Energy Cost (Period)" : "Energy Cost (Today)"} tone="warning" icon={<IndianRupee size={17} />}
           value={costToday != null ? costToday / 100000 : "…"} unit={costToday != null ? "L" : ""}
           prefix={costToday != null ? "₹ " : ""} decimals={2} pending={costToday == null}
-          footnote={<span>daily cost-center total</span>} />
+          footnote={<span>{d.is_range ? "cost-center total, whole period" : "daily cost-center total"}</span>} />
         <KPICard label="Expected Monthly Bill" tone="danger" icon={<Receipt size={17} />}
           value={expectedBill != null ? expectedBill / 1e7 : "…"} unit={expectedBill != null ? "Cr" : ""}
           prefix={expectedBill != null ? "₹ " : ""} decimals={2} pending={expectedBill == null}
@@ -75,17 +94,21 @@ export default function Dashboard() {
       {/* Row 1: demand trend + alerts */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHead title="24-Hour Demand Trend" icon={<TrendingDown size={16} />}
-            right={<span className="text-xs text-muted-foreground">MW · Today vs Yesterday</span>} />
+          <CardHead title={d.is_range ? "Daily Consumption Trend" : "24-Hour Demand Trend"} icon={<TrendingDown size={16} />}
+            right={<span className="text-xs text-muted-foreground">
+              {d.is_range ? "MWh · This period vs previous period" : "MW · Today vs Yesterday"}
+            </span>} />
           <CardBody>{demandOpt && <EChart option={demandOpt} height={260} />}</CardBody>
         </Card>
         <Card>
           <CardHead title="Alerts" icon={<Bell size={16} />}
-            right={alerts && alerts.count > 0
-              ? <StatusChip tone="warning" dot>{alerts.count} active</StatusChip>
-              : <StatusChip tone="success" dot>all clear</StatusChip>} />
+            right={!alerts
+              ? null
+              : alerts.count > 0
+                ? <StatusChip tone="warning" dot>{alerts.count} active</StatusChip>
+                : <StatusChip tone="success" dot>all clear</StatusChip>} />
           <CardBody className="space-y-2">
-            {alerts && alerts.alerts.length > 0 ? alerts.alerts.map((a) => {
+            {!alerts ? <LoadingState label="Checking alerts…" className="py-6" /> : alerts.alerts.length > 0 ? alerts.alerts.map((a) => {
               const c = a.severity === "critical" ? "#EF4444" : a.severity === "warning" ? "#F59E0B" : "#2563EB";
               const AIcon = a.severity === "info" ? Bell : AlertTriangle;
               return (
@@ -111,16 +134,18 @@ export default function Dashboard() {
       {/* Row 2: TOD + top feeders + power quality */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Card>
-          <CardHead title="TOD Consumption" right={<span className="text-xs text-muted-foreground">Today</span>} />
+          <CardHead title="TOD Consumption" right={<span className="text-xs text-muted-foreground">{!d.is_range && d.live ? "Today" : periodLabel}</span>} />
           <CardBody>{todOpt && <EChart option={todOpt} height={230} />}</CardBody>
         </Card>
         <Card>
-          <CardHead title="Top Consuming Feeders" right={<span className="text-xs text-muted-foreground">avg MW · today</span>} />
+          <CardHead title="Top Consuming Feeders" right={<span className="text-xs text-muted-foreground">avg MW · {!d.is_range && d.live ? "today" : periodLabel}</span>} />
           <CardBody>{feedersOpt && <EChart option={feedersOpt} height={230} />}</CardBody>
         </Card>
         <Card>
           <CardHead title="Power Quality" icon={<Gauge size={16} />}
-            right={<StatusChip tone="success" dot pulse>Live</StatusChip>} />
+            right={d.live && !d.is_range
+              ? <StatusChip tone="success" dot pulse>Live</StatusChip>
+              : <StatusChip tone="info" dot>As of {d.is_range ? fmtDate(d.range!.end) : fmtDate(d.date!)}</StatusChip>} />
           <CardBody>
             <div className="grid grid-cols-2 gap-2">
               <Pq l="Power Factor" v={fmt(d.power_quality.power_factor, 3)} tone={pfTone(d.power_quality.power_factor)} s={pfLabel(d.power_quality.power_factor)} />
@@ -141,23 +166,28 @@ export default function Dashboard() {
 function buildDemand(d: Executive, mode: "light" | "dark"): EChartsOption {
   const pal = palette(mode);
   const ax = axisColors(mode);
+  const isRange = !!d.is_range;
+  const unit = isRange ? "MWh" : "MW";
+  const curLabel = isRange ? "This period" : "Today";
+  const prevLabel = isRange ? "Previous period" : "Yesterday";
   return {
     grid: { left: 8, right: 12, top: 24, bottom: 4, containLabel: true },
-    legend: { data: ["Today", "Yesterday"], right: 0, top: 0, itemWidth: 14, itemHeight: 8, textStyle: { color: ax.text, fontSize: 11 } },
-    tooltip: { trigger: "axis", valueFormatter: (v) => (v == null ? "—" : `${Number(v).toFixed(1)} MW`) },
+    legend: { data: [curLabel, prevLabel], right: 0, top: 0, itemWidth: 14, itemHeight: 8, textStyle: { color: ax.text, fontSize: 11 } },
+    tooltip: { trigger: "axis", valueFormatter: (v) => (v == null ? "—" : `${Number(v).toFixed(1)} ${unit}`) },
     xAxis: { type: "category", data: d.demand_trend.map((x) => x.hour), boundaryGap: false,
-      axisLabel: { color: ax.text, fontSize: 10, interval: 3 }, axisLine: { lineStyle: { color: ax.grid } }, axisTick: { show: false } },
+      axisLabel: { color: ax.text, fontSize: 10, interval: isRange ? 0 : 3, rotate: isRange ? 30 : 0 },
+      axisLine: { lineStyle: { color: ax.grid } }, axisTick: { show: false } },
     yAxis: { type: "value", axisLabel: { color: ax.text, fontSize: 10 }, splitLine: { lineStyle: { color: ax.grid, opacity: 0.5 } } },
     series: [
-      { name: "Yesterday", type: "line", data: d.demand_trend.map((x) => x.yesterday_mw), smooth: true,
-        showSymbol: false, lineStyle: { color: ax.text, width: 1.5, type: "dashed" } },
-      { name: "Today", type: "line", data: d.demand_trend.map((x) => x.today_mw), smooth: true,
-        showSymbol: false, lineStyle: { color: pal[0], width: 2.4 },
+      { name: prevLabel, type: "line", data: d.demand_trend.map((x) => x.yesterday_mw), smooth: true,
+        showSymbol: isRange, lineStyle: { color: ax.text, width: 1.5, type: "dashed" } },
+      { name: curLabel, type: "line", data: d.demand_trend.map((x) => x.today_mw), smooth: true,
+        showSymbol: isRange, lineStyle: { color: pal[0], width: 2.4 },
         areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [{ offset: 0, color: pal[0] + "66" }, { offset: 1, color: pal[0] + "00" }] } },
-        markLine: { silent: true, symbol: "none", data: [{ yAxis: 56 }],
+        ...(isRange ? {} : { markLine: { silent: true, symbol: "none", data: [{ yAxis: 56 }],
           lineStyle: { color: "#EF4444", type: "dashed" },
-          label: { formatter: "Contract 56 MVA", color: "#EF4444", fontSize: 10, position: "insideEndTop" } } },
+          label: { formatter: "Contract 56 MVA", color: "#EF4444", fontSize: 10, position: "insideEndTop" } } }) },
     ],
   };
 }

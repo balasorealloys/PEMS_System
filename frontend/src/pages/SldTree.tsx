@@ -4,7 +4,7 @@ import {
   Activity, AlertTriangle, Boxes, ChevronLeft, Cpu, Gauge, Network, RotateCw, Table2, Zap,
 } from "lucide-react";
 import { api, type SldNode, type SldTree as SldTreeT } from "../api";
-import { KPICard, Card, CardHead, CardBody, ChartFrame, EChart, StatusChip } from "../components/premium";
+import { KPICard, Card, CardHead, CardBody, ChartFrame, EChart, StatusChip, LoadingState } from "../components/premium";
 import SldFlow, { sldKey, type Orient } from "../components/premium/SldFlow";
 import SldOrgChart from "../components/premium/SldOrgChart";
 import { useThemeMode } from "../hooks/useThemeMode";
@@ -76,7 +76,7 @@ export default function SldTree({ onBack }: { onBack: () => void }) {
   const gaugeOpt = useMemo<EChartsOption>(() => buildGauge(efficiency, themeMode), [efficiency, themeMode]);
 
   if (err) return <div className="error">Failed to load: {err}</div>;
-  if (!t) return <div className="muted">Building hierarchy…</div>;
+  if (!t) return <LoadingState label="Building hierarchy…" />;
   const T = t.totals;
 
   return (

@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { api, type AuditRow, type ConstantRow, type MeterFactors, type Meter, type SapConfig, type SapCostCenter, type SystemConfigRow, type TariffRow } from "../api";
 import type { ViewKey } from "../components/AppShell";
-import { Card, CardHead, CardBody, StatusChip } from "../components/premium";
+import { Card, CardHead, CardBody, StatusChip, LoadingState } from "../components/premium";
 import { cn } from "../lib/utils";
 
 const inp = "w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary";
@@ -244,7 +244,7 @@ function ConstantsTab() {
     return { byKey, cats };
   }, [rows]);
 
-  if (loading) return <Card><CardBody><div className="py-8 text-center text-sm text-muted-foreground">Loading…</div></CardBody></Card>;
+  if (loading) return <Card><CardBody><LoadingState /></CardBody></Card>;
 
   return (
     <div className="space-y-4">
@@ -601,7 +601,7 @@ function SystemTab() {
   const [loading, setLoading] = useState(true);
   useEffect(() => { api.systemConfig().then(setRows).catch((e) => toast.error("Failed to load", { description: String(e) })).finally(() => setLoading(false)); }, []);
 
-  if (loading) return <Card><CardBody><div className="py-8 text-center text-sm text-muted-foreground">Loading…</div></CardBody></Card>;
+  if (loading) return <Card><CardBody><LoadingState /></CardBody></Card>;
   return (
     <Card>
       <CardHead title="System Configuration" icon={<Cpu size={16} />} right={<span className="text-xs text-muted-foreground">{rows.length} keys</span>} />
@@ -692,7 +692,7 @@ function ChangeLogTab() {
     <Card>
       <CardHead title="Change Log" icon={<History size={16} />} right={<span className="text-xs text-muted-foreground">{rows.length} entries</span>} />
       <CardBody>
-        {loading ? <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
+        {loading ? <LoadingState label="Loading change log…" className="py-8" />
           : rows.length === 0 ? <div className="py-8 text-center text-sm text-muted-foreground">No configuration changes recorded yet.</div>
             : (
               <div className="overflow-auto">

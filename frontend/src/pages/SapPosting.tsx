@@ -8,7 +8,7 @@ import {
   api, type SapConfig, type SapHistoryDay, type SapPreview, type SapPreviewRange, type SapRow,
 } from "../api";
 import type { ViewKey } from "../components/AppShell";
-import { KPICard, Card, CardHead, CardBody, StatusChip } from "../components/premium";
+import { KPICard, Card, CardHead, CardBody, StatusChip, LoadingState } from "../components/premium";
 import type { Tone } from "../design-system/status";
 import { useScope } from "../stores/scope";
 
@@ -35,6 +35,7 @@ export default function SapPosting({ onNavigate }: { onNavigate: (v: ViewKey) =>
   const [cfg, setCfg] = useState<SapConfig | null>(null);
   const [hist, setHist] = useState<SapHistoryDay[]>([]);
   const [busy, setBusy] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [force, setForce] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -56,7 +57,7 @@ export default function SapPosting({ onNavigate }: { onNavigate: (v: ViewKey) =>
     const jobs: Promise<unknown>[] = [loadDetail(range.end, null)];
     if (!single) jobs.push(api.sapPreviewRange(range.start, range.end).then(setRangePv));
     else setRangePv(null);
-    Promise.all(jobs).catch((e) => setErr(String(e))).finally(() => setBusy(false));
+    Promise.all(jobs).catch((e) => setErr(String(e))).finally(() => { setBusy(false); setInitialLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range.start, range.end]);
 
@@ -114,6 +115,8 @@ export default function SapPosting({ onNavigate }: { onNavigate: (v: ViewKey) =>
 
       {err && <div className="error">{err}</div>}
 
+      {initialLoading ? <LoadingState label="Loading SAP postings…" /> : (
+      <>
       {cfg && !cfg.configured && (
         <div className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
           <TriangleAlert size={18} className="shrink-0 text-amber-500" />
@@ -314,6 +317,8 @@ export default function SapPosting({ onNavigate }: { onNavigate: (v: ViewKey) =>
         OData payload {"{Postingdate, Costcenter, Costcentredesc, Dayunitconsunption, Dayunitrate, Dayamount}"}.
         Real submission runs only when SAP credentials are configured; otherwise rows stay staged (pending).
       </div>
+      </>
+      )}
     </div>
   );
 }

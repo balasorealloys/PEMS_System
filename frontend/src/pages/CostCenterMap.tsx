@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type MappingTree, type TreeCostCenter, type TreeFeeder } from "../api";
 import Icon from "../components/Icon";
+import { LoadingState } from "../components/premium";
 
 const PALETTE = ["#4f7cff", "#22d3ee", "#34d399", "#fbbf24", "#a78bfa", "#f87171",
   "#38bdf8", "#f472b6", "#2dd4bf", "#facc15"];
@@ -12,7 +13,7 @@ export default function CostCenterMap({ onBack }: { onBack: () => void }) {
   useEffect(() => { api.tree().then(setT).catch((e) => setErr(String(e))); }, []);
 
   if (err) return <div className="error">Failed to load map: {err}</div>;
-  if (!t) return <div className="muted">Building cost-center map…</div>;
+  if (!t) return <LoadingState label="Building cost-center map…" />;
 
   const totalKw = t.cost_centers.reduce((s, c) => s + Math.max(c.kw, 0), 0) || 1;
   const totalFeeders = t.cost_centers.reduce((s, c) => s + c.feeder_count, 0);

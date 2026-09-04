@@ -1,0 +1,35 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: pems-backend
+    container_name: pems-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8007
+    ports:
+      - "8007:8007"
+    networks:
+      - pems
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: pems-frontend
+    container_name: pems-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "4007:4007"
+    networks:
+      - pems
+
+networks:
+  pems:
+    driver: bridge

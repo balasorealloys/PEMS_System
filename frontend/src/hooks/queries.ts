@@ -1,9 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api";
 
+// local-date ISO (no timezone shift) — matches stores/scope.ts's iso()
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 // Centralised TanStack Query hooks over the typed API client.
-export const useExecutive = () =>
-  useQuery({ queryKey: ["executive"], queryFn: api.executive, refetchInterval: 30_000 });
+// `start`/`end` follow the header date-range picker. Auto-refresh only while the
+// scope's end is today or later — a fully historical range/day is static.
+export const useExecutive = (start?: string, end?: string) =>
+  useQuery({
+    queryKey: ["executive", start ?? "live", end ?? "live"],
+    queryFn: () => api.executive(start, end),
+    refetchInterval: end && end < todayIso() ? false : 30_000,
+  });
 
 export const useAlerts = () =>
   useQuery({ queryKey: ["alerts"], queryFn: api.alerts, refetchInterval: 60_000, staleTime: 30_000 });

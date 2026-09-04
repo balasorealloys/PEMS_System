@@ -71,11 +71,11 @@ function StatusBar({ s }: { s: Executive["status"] | null }) {
   return (
     <>
       <span className="status-item"><span className="dot ok" /> Last update <b>{t}</b></span>
-      <span className="status-item"><span className={`dot ${s.rtus_online === s.rtus_total ? "ok" : "warn"}`} /> RTUs <b>{s.rtus_online}/{s.rtus_total}</b></span>
+      <span className="status-item"><span className={`dot ${s.rtus_total == null ? "warn" : s.rtus_online === s.rtus_total ? "ok" : "warn"}`} /> RTUs <b>{s.rtus_online}/{s.rtus_total ?? "—"}</b></span>
       <span className="status-item">Feeders <b>{s.feeders_online}/{s.feeders_total}</b></span>
       <span className="status-item">Data points today <b>{s.data_points_today.toLocaleString("en-IN")}</b></span>
       <span className="status-item" style={{ marginLeft: "auto" }}>
-        <span className={`dot ${s.healthy ? "ok" : "warn"}`} /> System <b>{s.healthy ? "Healthy" : "Degraded"}</b>
+        <span className={`dot ${s.healthy ? "ok" : "warn"}`} /> System <b>{s.healthy == null ? "Unknown" : s.healthy ? "Healthy" : "Degraded"}</b>
       </span>
     </>
   );

@@ -4,7 +4,7 @@ import {
   Bolt, Calendar, ChevronDown, Download, Factory, Flame, IndianRupee, Layers, Percent, Table2,
 } from "lucide-react";
 import { api, type Balance, type FyMonths, type RateResult } from "../api";
-import { KPICard, Card, CardHead, CardBody, ChartFrame, EChart, StatusChip } from "../components/premium";
+import { KPICard, Card, CardHead, CardBody, ChartFrame, EChart, StatusChip, LoadingState } from "../components/premium";
 import EnergyBalance, { type Unit as BalUnit } from "../components/premium/EnergyBalance";
 import RateWorkingSheet from "../components/RateWorkingSheet";
 import { palette } from "../design-system/charts";
@@ -20,7 +20,7 @@ export default function Accounting() {
   const [rates, setRates] = useState<{ ftd: RateResult; mtd: RateResult; ytd: RateResult } | null>(null);
   const [fyMonths, setFyMonths] = useState<FyMonths | null>(null);
   const [asOf, setAsOf] = useState<string>("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [showWorking, setShowWorking] = useState(true);
@@ -108,7 +108,7 @@ export default function Accounting() {
         </div>
       )}
 
-      {loading && <div className="muted">Computing tariff &amp; balance…</div>}
+      {loading && <LoadingState label="Computing tariff & balance…" />}
 
       {/* Energy balance */}
       {bal && !bal.error && (

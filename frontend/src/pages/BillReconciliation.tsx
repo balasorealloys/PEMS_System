@@ -4,7 +4,7 @@ import {
   AlertTriangle, CheckCircle2, FileText, IndianRupee, Pencil, Save, Scale, X,
 } from "lucide-react";
 import { api, type ActualBill, type Recon } from "../api";
-import { Card, CardHead, CardBody, StatusChip } from "../components/premium";
+import { Card, CardHead, CardBody, StatusChip, LoadingState } from "../components/premium";
 import { useScope } from "../stores/scope";
 import { cn } from "../lib/utils";
 
@@ -41,7 +41,7 @@ export default function BillReconciliation() {
   const [r, setR] = useState<Recon | null>(null);
   const [actual, setActual] = useState<ActualBill>({});
   const [editing, setEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { api.accountingMonths().then(setMonths).catch(() => {}); }, []);
@@ -75,7 +75,7 @@ export default function BillReconciliation() {
         </div>
       </div>
 
-      {loading && <div className="muted">Rebuilding bill…</div>}
+      {loading && <LoadingState label="Rebuilding bill…" />}
 
       {r && r.components.length > 0 && (
         <>

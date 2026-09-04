@@ -45,6 +45,12 @@ export const useScope = create<ScopeState>()(
       setRange: (range) => set({ range }),
       setPlant: (plant) => set({ plant }),
     }),
-    { name: "pems.scope" },
+    {
+      name: "pems.scope",
+      // `range` is deliberately NOT persisted: every fresh load of the app should
+      // default to today's data. Only picking a different range within a session
+      // should show a different date — reopening/reloading the app resets to "Today".
+      partialize: (s) => ({ plant: s.plant, user: s.user }),
+    },
   ),
 );

@@ -53,7 +53,11 @@ def list_feeders(db: Session) -> list[dict]:
 
 
 def latest_reading_time(db: Session) -> datetime | None:
-    return db.execute(text(f"SELECT MAX(DateTimeStamp) FROM {VALUEDATA}")).scalar()
+    # filtered by the main incomer so this uses the (DeviceID, FeederID, DateTimeStamp)
+    # primary key index — an unfiltered MAX() over the ~20M-row table is a full scan.
+    return db.execute(text(
+        f"SELECT MAX(DateTimeStamp) FROM {VALUEDATA} WHERE DeviceID=:d AND FeederID=:f"
+    ), {"d": MAIN_INCOMER[0], "f": MAIN_INCOMER[1]}).scalar()
 
 
 def plant_overview(db: Session) -> dict:

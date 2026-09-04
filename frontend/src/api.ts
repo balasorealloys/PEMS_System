@@ -54,7 +54,10 @@ export interface Meter {
 
 export interface Executive {
   as_of: string | null;
-  date: string;
+  date?: string;
+  range?: { start: string; end: string };
+  live?: boolean;
+  is_range?: boolean;
   demand: { kw: number; mw: number; kva: number; contract_kva: number; utilization_pct: number };
   power_factor: number | null;
   consumption: { today_mwh: number | null; yesterday_mwh: number | null; change_pct: number | null };
@@ -71,8 +74,8 @@ export interface Executive {
     thd_v: number | null; thd_i: number | null; unbalance_pct: number | null;
   };
   status: {
-    last_update: string; rtus_online: number; rtus_total: number;
-    feeders_online: number; feeders_total: number; data_points_today: number; healthy: boolean;
+    last_update: string; rtus_online: number; rtus_total: number | null;
+    feeders_online: number; feeders_total: number; data_points_today: number; healthy: boolean | null;
   };
 }
 
@@ -271,7 +274,8 @@ async function j<T>(res: Response): Promise<T> {
 }
 
 export const api = {
-  executive: () => fetch(`${API}/dashboard/executive`).then(j<Executive>),
+  executive: (start?: string, end?: string) =>
+    fetch(`${API}/dashboard/executive${start ? `?start=${start}&end=${end ?? start}` : ""}`).then(j<Executive>),
   tree: () => fetch(`${API}/mapping/tree`).then(j<MappingTree>),
   sld: () => fetch(`${API}/mapping/sld`).then(j<SldTree>),
   summary: () => fetch(`${API}/mapping/summary`).then(j<Summary>),

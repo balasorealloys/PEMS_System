@@ -112,7 +112,7 @@ def get_session(db: Session, sid: str | None) -> dict | None:
     if not sid:
         return None
     row = db.execute(text(
-        f"""SELECT session_id, emp_id, emp_name, role, department
+        f"""SELECT session_id, emp_id, emp_name, role, department, last_active_at
             FROM {SESS_TBL}
             WHERE session_id = :sid AND is_active = 1
               AND last_active_at > (NOW() - INTERVAL {IDLE_HOURS} HOUR)"""),
