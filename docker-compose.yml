@@ -10,9 +10,12 @@ services:
       - .env
     environment:
       APP_HOST: 0.0.0.0
-      APP_PORT: 8007
-    ports:
-      - "8007:8007"
+      APP_PORT: 8007        # internal only — reached by the frontend nginx over the
+      PGSSLMODE: disable     # pems network (backend:8007); the new PG has no SSL
+    # No host port published: the backend is not exposed on the host — only the
+    # frontend (:4040) is. Keeps PEMS to a single host port on the shared server.
+    expose:
+      - "8007"
     networks:
       - pems
 
@@ -26,7 +29,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "4007:4007"
+      - "4040:4040"          # host port 4040 (verified free in the baldev-gpu registry)
     networks:
       - pems
 

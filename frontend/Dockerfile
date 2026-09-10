@@ -7,9 +7,9 @@ FROM nginx:1.27-alpine
 COPY frontend/dist/ /usr/share/nginx/html/
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 4007
+EXPOSE 4040
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -qO- http://localhost:4007/ >/dev/null 2>&1 || exit 1
+    CMD wget -qO- http://localhost:4040/ >/dev/null 2>&1 || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
