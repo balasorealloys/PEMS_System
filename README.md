@@ -72,7 +72,7 @@ copy ..\.env.example ..\.env                         # then fill in DB creds
 uvicorn app.main:app --reload
 ```
 
-Open http://localhost:8000/docs for the API.
+Open http://localhost:4040/docs for the API.
 
 ## Database setup (one-time)
 
@@ -97,7 +97,7 @@ Full deployment steps are in [DEPLOYMENT.md](DEPLOYMENT.md). See
 ```bash
 cd frontend
 npm install
-npm run dev                            # http://localhost:5173 (proxies /api -> :8000)
+npm run dev                            # proxies /api -> :4040 (dev server on :5174)
 ```
 
 ## Configuration

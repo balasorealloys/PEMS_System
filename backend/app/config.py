@@ -53,9 +53,9 @@ class Settings(BaseSettings):
     # app
     app_env: str = "dev"
     api_prefix: str = "/api"
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:4040"
     app_host: str = "0.0.0.0"     # bind address for the production server
-    app_port: int = 8000          # set to an available port on the server (.env)
+    app_port: int = 4040          # set to an available port on the server (.env)
 
     @property
     def sqlalchemy_url(self) -> URL:

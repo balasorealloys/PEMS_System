@@ -20,10 +20,10 @@ RUN useradd --create-home --shell /bin/bash pems \
     && chown -R pems:pems /app
 USER pems
 
-EXPOSE 8007
+EXPOSE 4040
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -fsS "http://localhost:${APP_PORT:-8007}/api/health" || exit 1
+    CMD curl -fsS "http://localhost:${APP_PORT:-4040}/api/health" || exit 1
 
 # APP_HOST/APP_PORT come from the environment (see docker-compose.yml) — .env is not
 # baked into the image, it's supplied at run time via env_file.
