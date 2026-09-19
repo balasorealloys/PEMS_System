@@ -55,13 +55,24 @@ export default function BillReconciliation() {
   async function save() {
     setBusy(true);
     try {
-      const updated = await api.saveReconActual(month, actual);
-      setR(updated); setEditing(false);
+      // Parse the raw text fields into numbers only here (empty/invalid → null),
+      // so decimals type freely and no NaN is ever stored/sent.
+      const numericKeys = new Set([...HEADER_FIELDS, ...CHARGE_FIELDS].filter((f) => !(f as { text?: boolean }).text).map((f) => f.k as string));
+      const payload = { ...actual } as Record<string, unknown>;
+      for (const k of numericKeys) {
+        const raw = payload[k];
+        const num = raw == null || String(raw).trim() === "" ? null : Number(raw);
+        payload[k] = num != null && isFinite(num) ? num : null;
+      }
+      const updated = await api.saveReconActual(month, payload as ActualBill);
+      setR(updated); setActual(payload as ActualBill); setEditing(false);
       toast.success("Actual bill saved", { description: `Reconciled ${fmtMonth(month)}` });
     } catch (e) { toast.error("Save failed", { description: String(e) }); } finally { setBusy(false); }
   }
-  const setF = (k: keyof ActualBill, v: string, text?: boolean) =>
-    setActual((a) => ({ ...a, [k]: text ? v : (v === "" ? null : Number(v)) }));
+  // Keep the raw typed text while editing (so "0.", "0.998", "-" etc. are allowed);
+  // numeric fields are converted to numbers on save.
+  const setF = (k: keyof ActualBill, v: string) =>
+    setActual((a) => ({ ...a, [k]: v === "" ? null : v } as ActualBill));
 
   const inp = "w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary tabular-nums";
   const lbl = "mb-1 block text-xs font-medium text-muted-foreground";
@@ -171,7 +182,17 @@ export default function BillReconciliation() {
                           <div key={f.k}>
                             <label className={lbl}>{f.label}</label>
                             <input className={inp} inputMode={f.text ? "text" : "decimal"}
-                              value={(actual[f.k] as string | number | null) ?? ""} onChange={(e) => setF(f.k, e.target.value, f.text)} />
+                              value={(actual[f.k] as string | number | null) ?? ""} onChange={(e) => setF(f.k, e.target.value)} />
+                            {f.k === "power_factor" && (() => {
+                              const kwh = Number(actual.kwh_total), kvah = Number(actual.kvah_total);
+                              const pf = kvah > 0 ? kwh / kvah : NaN;
+                              return isFinite(pf) ? (
+                                <button type="button" className="mt-1 text-[11px] text-primary hover:underline"
+                                  onClick={() => setF("power_factor", pf.toFixed(4))}>
+                                  = {pf.toFixed(4)} from kWh ÷ kVAh — click to use
+                                </button>
+                              ) : null;
+                            })()}
                           </div>
                         ))}
                       </div>
@@ -198,7 +219,10 @@ export default function BillReconciliation() {
                       <div key={f.k} className="flex items-baseline justify-between gap-2 border-b border-border/30 py-1">
                         <span className="text-muted-foreground">{f.label.replace(" ₹", "")}</span>
                         <span className="font-medium tabular-nums">
-                          {actual[f.k] == null ? "—" : (HEADER_FIELDS.find((x) => x.k === f.k)?.text ? String(actual[f.k]) : inr(Number(actual[f.k])))}
+                          {actual[f.k] == null ? "—"
+                            : (f as { text?: boolean }).text ? String(actual[f.k])
+                            : f.k === "power_factor" ? Number(actual[f.k]).toFixed(4)
+                            : inr(Number(actual[f.k]))}
                         </span>
                       </div>
                     ))}
