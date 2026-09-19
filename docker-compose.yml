@@ -34,6 +34,9 @@ services:
     environment:
       PGSSLMODE: disable
     command: ["python", "-m", "app.services.rollup", "--loop"]
+    # This worker has no HTTP server, so the image's web healthcheck doesn't apply.
+    healthcheck:
+      disable: true
     depends_on:
       - backend
     networks:
