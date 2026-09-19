@@ -109,6 +109,13 @@ app.include_router(roles.router, prefix=settings.api_prefix)
 # --- keep the 15-min rollup fresh (drives fast reports) ---
 @app.on_event("startup")
 def _start_rollup_scheduler() -> None:
+    # In Docker the dedicated `rollup` worker container keeps the 15-min rollup fresh,
+    # so the API backend sets ROLLUP_IN_APP=0 to avoid double-refreshing. For a local
+    # single-process run (python run.py) it defaults on.
+    import os
+    if os.getenv("ROLLUP_IN_APP", "1") != "1":
+        print("rollup scheduler disabled in-app (ROLLUP_IN_APP=0) — handled by the rollup worker")
+        return
     try:
         import threading
         from apscheduler.schedulers.background import BackgroundScheduler

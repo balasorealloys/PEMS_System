@@ -12,10 +12,30 @@ services:
       APP_HOST: 0.0.0.0
       APP_PORT: 4040        # internal only — reached by the frontend nginx over the
       PGSSLMODE: disable     # pems network (backend:4040); the new PG has no SSL
+      ROLLUP_IN_APP: "0"     # the dedicated `rollup` worker keeps the rollup fresh
     # No host port published: the backend is not exposed on the host — only the
     # frontend (:4040) is. Keeps PEMS to a single host port on the shared server.
     expose:
       - "4040"
+    networks:
+      - pems
+
+  # Dedicated worker: refreshes the 15-min rollup every 15 min, independent of the
+  # API process (the in-app scheduler proved unreliable — a hung run could wedge it).
+  rollup:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: pems-backend
+    container_name: pems-rollup
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PGSSLMODE: disable
+    command: ["python", "-m", "app.services.rollup", "--loop"]
+    depends_on:
+      - backend
     networks:
       - pems
 

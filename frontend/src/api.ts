@@ -157,6 +157,7 @@ export interface SapDaySummary {
 }
 export interface SapPreviewRange {
   start: string; end: string; days: SapDaySummary[]; total_amount: number; total_kwh: number;
+  unit_rate: number; rate_source: string;
 }
 
 export interface ReconComponent {
