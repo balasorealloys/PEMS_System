@@ -170,6 +170,11 @@ export interface Recon {
   status: "matched" | "review" | null;
   inputs: Record<string, number | string | boolean | null>;
   components: ReconComponent[];
+  energy_slabs?: {
+    threshold_pct: number;
+    s1_kvah: number; s1_rate: number; s1_amount: number;
+    s2_kvah: number; s2_rate: number; s2_amount: number;
+  } | null;
   computed_total: number; actual_total: number | null;
   total_variance: number | null; total_variance_pct: number | null;
   note: string;

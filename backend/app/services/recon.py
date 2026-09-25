@@ -88,6 +88,9 @@ def compute(db: Session, month: str) -> dict:
             "complete": rc.get("days_elapsed", 0) >= dim - 0.5,
         },
         "components": components,
+        # the two load-factor slabs behind the single Energy Charge line, so the UI
+        # can show that PEMS splits kVAh across both rates exactly like the TPNODL bill
+        "energy_slabs": rc.get("energy_slabs"),
         "computed_total": round(computed_total, 2),
         "actual_total": round(actual_total, 2) if actual_total is not None else None,
         "total_variance": round(total_var, 2) if total_var is not None else None,

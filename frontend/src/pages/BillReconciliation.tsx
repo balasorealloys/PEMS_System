@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangle, CheckCircle2, FileText, IndianRupee, Pencil, Save, Scale, X,
@@ -133,20 +133,33 @@ export default function BillReconciliation() {
                   </thead>
                   <tbody>
                     {r.components.map((c) => (
-                      <tr key={c.component} className="border-b border-border/40 last:border-0">
-                        <td className="px-5 py-2">
-                          <div className="font-medium">{c.component}</div>
-                          {c.note && <div className="text-[11px] text-muted-foreground">{c.note}</div>}
-                        </td>
-                        <td className="py-2 text-right font-semibold tabular-nums">{inr(c.computed)}</td>
-                        <td className="py-2 text-right tabular-nums text-muted-foreground">{c.actual != null ? inr(c.actual) : "—"}</td>
-                        <td className={cn("py-2 text-right tabular-nums", varClass(c.variance_pct))}>
-                          {c.variance != null ? `${c.variance > 0 ? "+" : ""}${inr(c.variance)}` : "—"}
-                        </td>
-                        <td className={cn("px-5 py-2 text-right tabular-nums", varClass(c.variance_pct))}>
-                          {c.variance_pct != null ? `${c.variance_pct > 0 ? "+" : ""}${c.variance_pct}%` : "—"}
-                        </td>
-                      </tr>
+                      <Fragment key={c.component}>
+                        <tr className="border-b border-border/40 last:border-0">
+                          <td className="px-5 py-2">
+                            <div className="font-medium">{c.component}</div>
+                            {c.note && <div className="text-[11px] text-muted-foreground">{c.note}</div>}
+                          </td>
+                          <td className="py-2 text-right font-semibold tabular-nums">{inr(c.computed)}</td>
+                          <td className="py-2 text-right tabular-nums text-muted-foreground">{c.actual != null ? inr(c.actual) : "—"}</td>
+                          <td className={cn("py-2 text-right tabular-nums", varClass(c.variance_pct))}>
+                            {c.variance != null ? `${c.variance > 0 ? "+" : ""}${inr(c.variance)}` : "—"}
+                          </td>
+                          <td className={cn("px-5 py-2 text-right tabular-nums", varClass(c.variance_pct))}>
+                            {c.variance_pct != null ? `${c.variance_pct > 0 ? "+" : ""}${c.variance_pct}%` : "—"}
+                          </td>
+                        </tr>
+                        {/* Load-factor slab split behind the Energy Charge — same method as the
+                            TPNODL bill: kVAh up to the LF threshold at the higher rate, the excess
+                            at the lower rate. Shown so it's visible PEMS applies BOTH rates. */}
+                        {c.component === "Energy Charge" && r.energy_slabs && (
+                          <>
+                            <SlabRow label={`Slab 1 · ≤${r.energy_slabs.threshold_pct}% LF`}
+                              kvah={r.energy_slabs.s1_kvah} rate={r.energy_slabs.s1_rate} amount={r.energy_slabs.s1_amount} />
+                            <SlabRow label={`Slab 2 · >${r.energy_slabs.threshold_pct}% LF`}
+                              kvah={r.energy_slabs.s2_kvah} rate={r.energy_slabs.s2_rate} amount={r.energy_slabs.s2_amount} />
+                          </>
+                        )}
+                      </Fragment>
                     ))}
                     <tr className="border-t-2 font-bold">
                       <td className="px-5 py-2.5">Total</td>
@@ -241,6 +254,22 @@ export default function BillReconciliation() {
       )}
       {r && r.components.length === 0 && <div className="rounded-xl border p-6 text-center text-muted-foreground">{r.note}</div>}
     </div>
+  );
+}
+
+// One indented sub-row under Energy Charge showing a load-factor slab: kVAh × rate = ₹.
+const kvahFmt = (v: number) => v.toLocaleString("en-IN", { maximumFractionDigits: 0 });
+function SlabRow({ label, kvah, rate, amount }: { label: string; kvah: number; rate: number; amount: number }) {
+  return (
+    <tr className="border-b border-border/40 bg-muted/20 last:border-0">
+      <td className="px-5 py-1.5 pl-9">
+        <div className="text-xs text-muted-foreground">
+          {label} — <span className="tabular-nums">{kvahFmt(kvah)}</span> kVAh × ₹{rate}
+        </div>
+      </td>
+      <td className="py-1.5 text-right text-xs tabular-nums text-muted-foreground">{inr(amount)}</td>
+      <td /><td /><td className="px-5" />
+    </tr>
   );
 }
 
