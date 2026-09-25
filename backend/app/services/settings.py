@@ -39,6 +39,10 @@ CONST_DEFAULTS: dict[str, float] = {
     "meter_mult_factor": 1.01,
     "contract_demand_kva": 56000.0,
     "mmfc_floor_pct": 80.0,
+    # ToD as a percentage of the energy rate (OERC FY2026-27 order, w.e.f. 1 Apr 2026)
+    "tod_peak_pct": 10.0,
+    "tod_solar_pct": 10.0,
+    # legacy flat adders (superseded by the % order; retained for older references)
     "tod_peak_adder": 0.30,
     "tod_solar_incentive": 0.20,
 }

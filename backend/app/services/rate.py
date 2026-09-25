@@ -34,8 +34,12 @@ from app.services.plant import MAIN  # main incomer meter, from config
 
 # ToD adders (Rs/kVAh) and MMFC floor — fallback defaults. The live values are
 # read date-effectively from pems_constant (System Settings → Constants & Factors).
-TOD_PEAK_ADDER = 0.30
+TOD_PEAK_ADDER = 0.30        # legacy flat adders (pre-order); kept only for the LF>80% rebate coeff
 TOD_SOLAR_INCENTIVE = 0.20
+# OERC FY2026-27 tariff order (w.e.f. 1 Apr 2026): ToD is a PERCENTAGE of the energy
+# rate applied within the energy charge — peak +10%, solar −10% (no separate flat line).
+TOD_PEAK_PCT = 10.0
+TOD_SOLAR_PCT = 10.0
 MMFC_FLOOR_PCT = 80
 DAYS_BASIS_FIXED = None  # None → use actual days in month
 
@@ -106,8 +110,8 @@ def _max_demand(db: Session, mstart: datetime, mend: datetime) -> tuple[float, d
 def _bill(cons: dict, md_kva: float, tf: dict, days_in_month: int, days_elapsed: float,
           contract_kva: int, consts: dict | None = None) -> dict:
     c = consts or {}
-    tod_peak_adder = float(c.get("tod_peak_adder", TOD_PEAK_ADDER))
-    tod_solar_incentive = float(c.get("tod_solar_incentive", TOD_SOLAR_INCENTIVE))
+    tod_peak_pct = float(c.get("tod_peak_pct", TOD_PEAK_PCT))
+    tod_solar_pct = float(c.get("tod_solar_pct", TOD_SOLAR_PCT))
     mmfc_floor = float(c.get("mmfc_floor_pct", MMFC_FLOOR_PCT))
     kwh, kvah = cons["kwh"], cons["kvah"]
     solar, peak = cons["solar_kvah"], cons["peak_kvah"]
@@ -133,9 +137,12 @@ def _bill(cons: dict, md_kva: float, tf: dict, days_in_month: int, days_elapsed:
     s2_units = max(s2_units, 0.0)
     energy = s1_units * slab1 + s2_units * slab2
 
-    # ToD
-    tod_peak = peak * tod_peak_adder
-    tod_solar = -solar * tod_solar_incentive
+    # ToD (OERC FY2026-27 order, w.e.f. 1 Apr 2026): peak +peak_pct%, solar −solar_pct%
+    # of the energy rate, applied within the energy charge (the separate flat ToD line is
+    # gone). The rate is the blended per-kVAh energy rate actually charged this period.
+    tod_rate = (energy / kvah) if kvah else 0.0
+    tod_peak = peak * tod_rate * (tod_peak_pct / 100.0)
+    tod_solar = -solar * tod_rate * (tod_solar_pct / 100.0)
     tod_net = tod_peak + tod_solar
 
     # demand (projected) + overdrawal, with MMFC floor
@@ -183,7 +190,7 @@ def _bill(cons: dict, md_kva: float, tf: dict, days_in_month: int, days_elapsed:
 def _load_consts(db: Session, on: date) -> dict:
     """Date-effective operational constants for the rate engine."""
     return {k: cfg.const_val(db, k, on) for k in
-            ("tod_peak_adder", "tod_solar_incentive", "mmfc_floor_pct", "contract_demand_kva")}
+            ("tod_peak_pct", "tod_solar_pct", "mmfc_floor_pct", "contract_demand_kva")}
 
 
 def _latest_block(db: Session):
