@@ -27,7 +27,7 @@ def energy_master_xlsx(d: dict) -> Workbook:
     ws.column_dimensions["A"].width = 34
     ws.column_dimensions["B"].width = 16
     ws.column_dimensions["C"].width = 18
-    ws.column_dimensions["D"].width = 12
+    ws.column_dimensions["D"].width = 16
 
     r = 1
     ws.merge_cells(f"A{r}:D{r}")
@@ -67,6 +67,21 @@ def energy_master_xlsx(d: dict) -> Workbook:
             if fill: ws[f"{col}{r}"].fill = fill
         r += 1
 
+    def slab_line(name, kvah, rate, amount, bold=False, fill=None):
+        """One load-factor slab row: kVAh (B), ₹/kVAh rate (C), amount ₹ (D)."""
+        nonlocal r
+        ws[f"A{r}"] = name
+        ws[f"B{r}"] = round(kvah, 1) if kvah is not None else None
+        ws[f"B{r}"].alignment = _RIGHT; ws[f"B{r}"].number_format = "#,##0"
+        ws[f"C{r}"] = rate; ws[f"C{r}"].alignment = _RIGHT; ws[f"C{r}"].number_format = "#,##0.00"
+        ws[f"D{r}"] = round(amount, 2) if amount is not None else None
+        ws[f"D{r}"].alignment = _RIGHT; ws[f"D{r}"].number_format = "#,##0"
+        for col in "ABCD":
+            ws[f"{col}{r}"].border = _BORDER
+            if bold: ws[f"{col}{r}"].font = _BOLD
+            if fill: ws[f"{col}{r}"].fill = fill
+        r += 1
+
     section("GRID (INCOMER)")
     header()
     line("Total Power Consumption (Grid)", d["grid_mwh"], "", "", bold=True, fill=_FILL_TOTAL)
@@ -98,6 +113,22 @@ def energy_master_xlsx(d: dict) -> Workbook:
     for cc in d["cost_centers"]:
         line(cc["description"] or cc["sap_costcenter"] or "Unallocated", cc["mwh"],
              cc["sap_costcenter"] or "", "")
+
+    # Energy-charge load-factor slab split from the 132 kV incomer bill (same tiering
+    # as the TPNODL bill: kVAh up to the LF threshold at the higher rate, the excess
+    # at the lower rate). Only present when the tariff engine produced a split.
+    es = d.get("energy_slabs")
+    if es:
+        r += 1
+        section("ENERGY CHARGE — LOAD-FACTOR SLABS (132 kV incomer bill)")
+        for col, val in zip("ABCD", ["Slab", "kVAh", "Rs / kVAh", "Amount Rs"]):
+            cell = ws[f"{col}{r}"]; cell.value = val; cell.font = _BOLD; cell.border = _BORDER
+        r += 1
+        thr = es.get("threshold_pct", 60)
+        slab_line(f"Slab 1 (<= {thr}% LF)", es["s1_kvah"], es["s1_rate"], es["s1_amount"])
+        slab_line(f"Slab 2 (> {thr}% LF)", es["s2_kvah"], es["s2_rate"], es["s2_amount"])
+        slab_line("Total Energy Charge", es["s1_kvah"] + es["s2_kvah"], None,
+                  es["s1_amount"] + es["s2_amount"], bold=True, fill=_FILL_TOTAL)
 
     r += 1
     ws.merge_cells(f"A{r}:D{r}")
