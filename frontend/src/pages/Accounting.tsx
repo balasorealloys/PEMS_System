@@ -188,8 +188,14 @@ export default function Accounting() {
                 <table className="w-full text-sm">
                   <tbody>
                     <BillRow label="Energy charge (kVAh × slab by load factor)" v={rates.mtd.components.energy} />
-                    <BillRow label="ToD peak surcharge (+₹0.30/kVAh)" v={rates.mtd.components.tod_surcharge} />
-                    <BillRow label="ToD solar incentive (−₹0.20/kVAh)" v={rates.mtd.components.tod_incentive} />
+                    {rates.mtd.energy_slabs && (
+                      <>
+                        <SlabBillRow es={rates.mtd.energy_slabs} which={1} />
+                        <SlabBillRow es={rates.mtd.energy_slabs} which={2} />
+                      </>
+                    )}
+                    <BillRow label="ToD peak surcharge (% of energy rate)" v={rates.mtd.components.tod_surcharge} />
+                    <BillRow label="ToD solar incentive (% of energy rate)" v={rates.mtd.components.tod_incentive} />
                     <BillRow label={`Demand / MMFC (${fmtN(rates.mtd.billable_kva)} × 250 × ${rates.mtd.days_elapsed}/${rates.mtd.days_in_month})`} v={rates.mtd.components.demand} />
                     <BillRow label="Overdrawal penalty" v={rates.mtd.components.overdrawal} />
                     <BillRow label="High load-factor rebate" v={rates.mtd.components.lf_rebate} />
@@ -352,6 +358,23 @@ function BillRow({ label, v }: { label: string; v: number }) {
     <tr className="border-b border-border/40">
       <td className="py-1.5 text-muted-foreground">{label}</td>
       <td className={`py-1.5 text-right font-medium tabular-nums ${v < 0 ? "text-emerald-600 dark:text-emerald-400" : ""}`}>₹ {fmtN(v)}</td>
+    </tr>
+  );
+}
+
+// Indented sub-row under Energy charge: one load-factor slab (kVAh × rate = ₹),
+// mirroring how the TPNODL bill itemises Slab 1 (≤threshold LF) and Slab 2 (excess).
+function SlabBillRow({ es, which }: { es: NonNullable<RateResult["energy_slabs"]>; which: 1 | 2 }) {
+  const kvah = which === 1 ? es.s1_kvah : es.s2_kvah;
+  const rate = which === 1 ? es.s1_rate : es.s2_rate;
+  const amount = which === 1 ? es.s1_amount : es.s2_amount;
+  const label = which === 1 ? `≤${es.threshold_pct}% LF` : `>${es.threshold_pct}% LF`;
+  return (
+    <tr className="border-b border-border/40 bg-muted/20">
+      <td className="py-1 pl-6 text-xs text-muted-foreground">
+        Slab {which} · {label} — <span className="tabular-nums">{fmtN(kvah)}</span> kVAh × ₹{rate}
+      </td>
+      <td className="py-1 text-right text-xs tabular-nums text-muted-foreground">₹ {fmtN(amount)}</td>
     </tr>
   );
 }
