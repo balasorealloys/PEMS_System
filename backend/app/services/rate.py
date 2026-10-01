@@ -126,7 +126,17 @@ def _bill(cons: dict, md_kva: float, tf: dict, days_in_month: int, days_elapsed:
     load_factor = (kvah / (md_kva * hours) * 100) if (md_kva and kvah) else 0.0
 
     net = kvah
+    # The ToD band kVAh come from hourly register deltas, which UNDER-sum the month total
+    # (increments across each hour boundary aren't captured — ~25% of consumption). Rescale
+    # the three bands to the accurate total kVAh before costing, preserving their ToD
+    # proportions, so the energy charge is built on the full consumption, not ~75% of it.
     normal = cons["normal_kvah"]
+    band_sum = solar + peak + normal
+    if kvah > 0 and band_sum > 0:
+        _f = kvah / band_sum
+        solar, peak, normal = solar * _f, peak * _f, normal * _f
+    else:
+        normal, peak, solar = kvah, 0.0, 0.0
 
     # Energy charge — OERC FY2026-27 actual-bill method (confirmed to the rupee against the
     # Jul & Aug 2026 TPNODL bills). Two steps:
