@@ -164,17 +164,21 @@ export interface ReconComponent {
   component: string; computed: number; actual: number | null;
   variance: number | null; variance_pct: number | null; note?: string | null;
 }
+// Energy charge split across the three ToD time-bands (matches the TPNODL bill's
+// Slab Normal / Peak / Solar lines). base_rate is the LF-blended Rs/kVAh.
+export interface EnergySlabs {
+  base_rate: number;
+  normal_kvah: number; normal_rate: number; normal_amount: number;
+  peak_kvah: number; peak_rate: number; peak_amount: number;
+  solar_kvah: number; solar_rate: number; solar_amount: number;
+}
 export interface Recon {
   month: string;
   has_actual: boolean;
   status: "matched" | "review" | null;
   inputs: Record<string, number | string | boolean | null>;
   components: ReconComponent[];
-  energy_slabs?: {
-    threshold_pct: number;
-    s1_kvah: number; s1_rate: number; s1_amount: number;
-    s2_kvah: number; s2_rate: number; s2_amount: number;
-  } | null;
+  energy_slabs?: EnergySlabs | null;
   computed_total: number; actual_total: number | null;
   total_variance: number | null; total_variance_pct: number | null;
   note: string;
@@ -238,15 +242,11 @@ export interface RateResult {
   solar_kvah?: number; normal_kvah?: number; peak_kvah?: number;
   load_factor_pct: number; days_in_month: number; days_elapsed: number;
   components: {
-    energy: number; tod_surcharge: number; tod_incentive: number; demand: number;
+    energy: number; demand: number;
     overdrawal: number; lf_rebate: number; electricity_duty: number;
     meter_rent: number; customer_service_charge: number;
   };
-  energy_slabs?: {
-    threshold_pct: number;
-    s1_kvah: number; s1_rate: number; s1_amount: number;
-    s2_kvah: number; s2_rate: number; s2_amount: number;
-  };
+  energy_slabs?: EnergySlabs;
   total: number; per_unit_rate: number;
   months?: { month: string; total: number; kwh: number; per_unit_rate: number }[];
 }

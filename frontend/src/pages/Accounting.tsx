@@ -187,15 +187,14 @@ export default function Accounting() {
               {showBreakdown && (
                 <table className="w-full text-sm">
                   <tbody>
-                    <BillRow label="Energy charge (kVAh × slab by load factor)" v={rates.mtd.components.energy} />
+                    <BillRow label="Energy charge (ToD-band slabs, ToD baked in)" v={rates.mtd.components.energy} />
                     {rates.mtd.energy_slabs && (
                       <>
-                        <SlabBillRow es={rates.mtd.energy_slabs} which={1} />
-                        <SlabBillRow es={rates.mtd.energy_slabs} which={2} />
+                        <SlabBillRow es={rates.mtd.energy_slabs} band="normal" />
+                        <SlabBillRow es={rates.mtd.energy_slabs} band="peak" />
+                        <SlabBillRow es={rates.mtd.energy_slabs} band="solar" />
                       </>
                     )}
-                    <BillRow label="ToD peak surcharge (% of energy rate)" v={rates.mtd.components.tod_surcharge} />
-                    <BillRow label="ToD solar incentive (% of energy rate)" v={rates.mtd.components.tod_incentive} />
                     <BillRow label={`Demand / MMFC (${fmtN(rates.mtd.billable_kva)} × 250 × ${rates.mtd.days_elapsed}/${rates.mtd.days_in_month})`} v={rates.mtd.components.demand} />
                     <BillRow label="Overdrawal penalty" v={rates.mtd.components.overdrawal} />
                     <BillRow label="High load-factor rebate" v={rates.mtd.components.lf_rebate} />
@@ -362,19 +361,20 @@ function BillRow({ label, v }: { label: string; v: number }) {
   );
 }
 
-// Indented sub-row under Energy charge: one load-factor slab (kVAh × rate = ₹),
-// mirroring how the TPNODL bill itemises Slab 1 (≤threshold LF) and Slab 2 (excess).
-function SlabBillRow({ es, which }: { es: NonNullable<RateResult["energy_slabs"]>; which: 1 | 2 }) {
-  const kvah = which === 1 ? es.s1_kvah : es.s2_kvah;
-  const rate = which === 1 ? es.s1_rate : es.s2_rate;
-  const amount = which === 1 ? es.s1_amount : es.s2_amount;
-  const label = which === 1 ? `≤${es.threshold_pct}% LF` : `>${es.threshold_pct}% LF`;
+// Indented sub-row under Energy charge: one ToD time-band (kVAh × rate = ₹),
+// mirroring the TPNODL bill's Slab Normal / Peak / Solar lines (ToD baked into the rate).
+function SlabBillRow({ es, band }: { es: NonNullable<RateResult["energy_slabs"]>; band: "normal" | "peak" | "solar" }) {
+  const row = {
+    normal: { label: "Normal", kvah: es.normal_kvah, rate: es.normal_rate, amount: es.normal_amount },
+    peak: { label: "Peak (+ToD)", kvah: es.peak_kvah, rate: es.peak_rate, amount: es.peak_amount },
+    solar: { label: "Solar (−ToD)", kvah: es.solar_kvah, rate: es.solar_rate, amount: es.solar_amount },
+  }[band];
   return (
     <tr className="border-b border-border/40 bg-muted/20">
       <td className="py-1 pl-6 text-xs text-muted-foreground">
-        Slab {which} · {label} — <span className="tabular-nums">{fmtN(kvah)}</span> kVAh × ₹{rate}
+        {row.label} — <span className="tabular-nums">{fmtN(row.kvah)}</span> kVAh × ₹{row.rate}
       </td>
-      <td className="py-1 text-right text-xs tabular-nums text-muted-foreground">₹ {fmtN(amount)}</td>
+      <td className="py-1 text-right text-xs tabular-nums text-muted-foreground">₹ {fmtN(row.amount)}</td>
     </tr>
   );
 }

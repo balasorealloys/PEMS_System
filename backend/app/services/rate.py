@@ -4,16 +4,17 @@ Reproduces BAL's TPNODL daily-bill workbook. The bill is computed on the **132 k
 incomer only** (TPNODL meters there); the resulting blended per-unit rate is then applied
 to internal cost-center consumption.
 
-Formula (confirmed against the 'Electricity Bill- Daily' workbook, Jun-2026):
-  energy   = kVAh split by load-factor slab:
-               LF>60%: (60/LF)*kVAh @ slab1 + remainder @ slab2 ; else all @ slab1
+Formula (confirmed to the rupee against the Jul & Aug 2026 TPNODL bills):
+  base     = LF-blended energy rate: kVAh split at the LF threshold (≤thr @ slab1,
+               excess @ slab2), blended back to one Rs/kVAh, rounded to 2 dp
+  energy   = ToD-band slabs on that base rate (ToD is baked in — NO separate ToD line):
+               normal_kVAh @ base + peak_kVAh @ base*(1+peak%) + solar_kVAh @ base*(1-solar%)
   demand   = billable_kVA * 250 / days_in_month * days_elapsed
                billable = MD, floored at 80% of contract demand (MMFC)
   overdraw = max(MD-CD,0) * 250 / days_in_month * days_elapsed
-  tod      = peak_kVAh * +0.30  (surcharge)  +  solar_kVAh * -0.20  (incentive)
-  lf_rebate= LF>80%: -0.20 * ((LF-80)/LF) * (kVAh-solar)  else 0
-  ED       = 9% * (energy + tod_net + lf_rebate)
-  total    = energy + tod_net + demand + overdraw + colony + lf_rebate
+  lf_rebate= LF>80%: -0.20 * ((LF-80)/LF) * kVAh  else 0
+  ED       = 9% * (energy + lf_rebate)
+  total    = energy + demand + overdraw + colony + lf_rebate
              + ED + meter_rent + CSC   (last two prorated by days)
   per_unit = total / kWh
 """
@@ -124,26 +125,34 @@ def _bill(cons: dict, md_kva: float, tf: dict, days_in_month: int, days_elapsed:
 
     load_factor = (kvah / (md_kva * hours) * 100) if (md_kva and kvah) else 0.0
 
-    # energy (load-factor slabs). NB: the workbook's "- solar" subtracts open-access solar
-    # GENERATION (BAL has none), NOT the ToD solar-hours kVAh — so energy uses full kVAh.
     net = kvah
+    normal = cons["normal_kvah"]
+
+    # Energy charge — OERC FY2026-27 actual-bill method (confirmed to the rupee against the
+    # Jul & Aug 2026 TPNODL bills). Two steps:
+    #   1) LF-blended BASE rate: kVAh split at the LF threshold (≤thr @ slab1, excess @
+    #      slab2), blended back to one Rs/kVAh and rounded to 2 dp.
+    #   2) that base rate is charged across the three ToD time-bands — normal @ base,
+    #      peak @ base*(1+peak%), solar @ base*(1-solar%) — each rate rounded to 2 dp.
+    # ToD is thus BAKED INTO the energy charge; there is no separate ToD surcharge line.
+    # (Pre-ToD months have peak%/solar% = 0, so all three bands collapse to the base rate,
+    #  i.e. the plain LF-blended energy — the method reproduces history unchanged.)
     if load_factor > lf_thr and load_factor > 0:
-        s1_units = lf_thr / load_factor * kvah
-        s2_units = kvah - s1_units
+        s1_units = lf_thr / load_factor * kvah      # ≤threshold-LF kVAh @ slab1
+        s2_units = kvah - s1_units                  # excess @ slab2
     else:
-        s1_units = net
-        s2_units = 0.0
+        s1_units, s2_units = kvah, 0.0
     s1_units = max(s1_units, 0.0)
     s2_units = max(s2_units, 0.0)
-    energy = s1_units * slab1 + s2_units * slab2
+    base_rate = round((s1_units * slab1 + s2_units * slab2) / kvah, 2) if kvah else round(slab1, 2)
 
-    # ToD (OERC FY2026-27 order, w.e.f. 1 Apr 2026): peak +peak_pct%, solar −solar_pct%
-    # of the energy rate, applied within the energy charge (the separate flat ToD line is
-    # gone). The rate is the blended per-kVAh energy rate actually charged this period.
-    tod_rate = (energy / kvah) if kvah else 0.0
-    tod_peak = peak * tod_rate * (tod_peak_pct / 100.0)
-    tod_solar = -solar * tod_rate * (tod_solar_pct / 100.0)
-    tod_net = tod_peak + tod_solar
+    normal_rate = base_rate
+    peak_rate = round(base_rate * (1 + tod_peak_pct / 100.0), 2)
+    solar_rate = round(base_rate * (1 - tod_solar_pct / 100.0), 2)
+    energy = normal * normal_rate + peak * peak_rate + solar * solar_rate
+
+    # ToD is embedded in the per-band energy rates above — no separate surcharge/incentive.
+    tod_net = 0.0
 
     # demand (projected) + overdrawal, with MMFC floor
     step = md_kva if md_kva > contract_kva else (md_kva if md_kva > mmfc_floor / 100 * contract_kva
@@ -155,8 +164,8 @@ def _bill(cons: dict, md_kva: float, tf: dict, days_in_month: int, days_elapsed:
     # high-load-factor rebate
     lf_rebate = (-TOD_SOLAR_INCENTIVE * ((load_factor - 80) / load_factor) * net) if load_factor > 80 else 0.0
 
-    electricity = energy + tod_net + demand + overdraw + lf_rebate
-    ed = (energy + tod_net + lf_rebate) * ed_pct / 100
+    electricity = energy + demand + overdraw + lf_rebate
+    ed = (energy + lf_rebate) * ed_pct / 100
     meter_rent = float(tf.get("meter_rent") or 2000) * proj
     csc = float(tf.get("customer_service_charge") or 700) * proj
     total = electricity + ed + meter_rent + csc
@@ -169,18 +178,19 @@ def _bill(cons: dict, md_kva: float, tf: dict, days_in_month: int, days_elapsed:
         "contract_kva": contract_kva, "load_factor_pct": round(load_factor, 2),
         "days_in_month": days_in_month, "days_elapsed": round(days_elapsed, 2),
         "components": {
-            "energy": round(energy, 2), "tod_surcharge": round(tod_peak, 2),
-            "tod_incentive": round(tod_solar, 2), "demand": round(demand, 2),
+            "energy": round(energy, 2), "demand": round(demand, 2),
             "overdrawal": round(overdraw, 2), "lf_rebate": round(lf_rebate, 2),
             "electricity_duty": round(ed, 2), "meter_rent": round(meter_rent, 2),
             "customer_service_charge": round(csc, 2),
         },
-        # energy split across the two load-factor slabs (so the bill can show
-        # how much is charged at the ≤threshold rate vs the >threshold rate)
+        # energy split across the three ToD time-bands (matches the TPNODL bill's
+        # "Slab Normal / Peak / Solar" lines). base_rate is the LF-blended Rs/kVAh;
+        # peak/solar are ±ToD% of it. ToD is inside the energy charge, not a separate line.
         "energy_slabs": {
-            "threshold_pct": round(lf_thr, 2),
-            "s1_kvah": round(s1_units, 1), "s1_rate": slab1, "s1_amount": round(s1_units * slab1, 2),
-            "s2_kvah": round(s2_units, 1), "s2_rate": slab2, "s2_amount": round(s2_units * slab2, 2),
+            "base_rate": base_rate,
+            "normal_kvah": round(normal, 1), "normal_rate": normal_rate, "normal_amount": round(normal * normal_rate, 2),
+            "peak_kvah": round(peak, 1), "peak_rate": peak_rate, "peak_amount": round(peak * peak_rate, 2),
+            "solar_kvah": round(solar, 1), "solar_rate": solar_rate, "solar_amount": round(solar * solar_rate, 2),
         },
         "total": round(total, 2),
         "per_unit_rate": round(per_unit, 4),

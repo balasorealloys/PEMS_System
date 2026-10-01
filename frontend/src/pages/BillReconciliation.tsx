@@ -24,7 +24,6 @@ const HEADER_FIELDS: { k: keyof ActualBill; label: string; text?: boolean }[] = 
 ];
 const CHARGE_FIELDS: { k: keyof ActualBill; label: string }[] = [
   { k: "energy_charge", label: "Energy Charge ₹" },
-  { k: "tod_charge", label: "Time of Day (net) ₹" },
   { k: "demand_charge", label: "Demand / MMFC ₹" },
   { k: "pf_charge", label: "Power-Factor Penalty ₹" },
   { k: "electricity_duty", label: "Electricity Duty ₹" },
@@ -148,15 +147,15 @@ export default function BillReconciliation() {
                             {c.variance_pct != null ? `${c.variance_pct > 0 ? "+" : ""}${c.variance_pct}%` : "—"}
                           </td>
                         </tr>
-                        {/* Load-factor slab split behind the Energy Charge — same method as the
-                            TPNODL bill: kVAh up to the LF threshold at the higher rate, the excess
-                            at the lower rate. Shown so it's visible PEMS applies BOTH rates. */}
+                        {/* Energy charge split across the three ToD time-bands — exactly as the
+                            TPNODL bill now shows it (Slab Normal / Peak / Solar). ToD is baked into
+                            the band rates (peak +%, solar −% of the LF-blended base rate), so there
+                            is no separate Time-of-Day line any more. */}
                         {c.component === "Energy Charge" && r.energy_slabs && (
                           <>
-                            <SlabRow label={`Slab 1 · ≤${r.energy_slabs.threshold_pct}% LF`}
-                              kvah={r.energy_slabs.s1_kvah} rate={r.energy_slabs.s1_rate} amount={r.energy_slabs.s1_amount} />
-                            <SlabRow label={`Slab 2 · >${r.energy_slabs.threshold_pct}% LF`}
-                              kvah={r.energy_slabs.s2_kvah} rate={r.energy_slabs.s2_rate} amount={r.energy_slabs.s2_amount} />
+                            <SlabRow label="Normal" kvah={r.energy_slabs.normal_kvah} rate={r.energy_slabs.normal_rate} amount={r.energy_slabs.normal_amount} />
+                            <SlabRow label="Peak (+ToD)" kvah={r.energy_slabs.peak_kvah} rate={r.energy_slabs.peak_rate} amount={r.energy_slabs.peak_amount} />
+                            <SlabRow label="Solar (−ToD)" kvah={r.energy_slabs.solar_kvah} rate={r.energy_slabs.solar_rate} amount={r.energy_slabs.solar_amount} />
                           </>
                         )}
                       </Fragment>

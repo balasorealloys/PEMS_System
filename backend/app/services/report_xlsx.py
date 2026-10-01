@@ -120,15 +120,16 @@ def energy_master_xlsx(d: dict) -> Workbook:
     es = d.get("energy_slabs")
     if es:
         r += 1
-        section("ENERGY CHARGE — LOAD-FACTOR SLABS (132 kV incomer bill)")
-        for col, val in zip("ABCD", ["Slab", "kVAh", "Rs / kVAh", "Amount Rs"]):
+        section("ENERGY CHARGE — ToD TIME-BAND SLABS (132 kV incomer bill)")
+        for col, val in zip("ABCD", ["Band", "kVAh", "Rs / kVAh", "Amount Rs"]):
             cell = ws[f"{col}{r}"]; cell.value = val; cell.font = _BOLD; cell.border = _BORDER
         r += 1
-        thr = es.get("threshold_pct", 60)
-        slab_line(f"Slab 1 (<= {thr}% LF)", es["s1_kvah"], es["s1_rate"], es["s1_amount"])
-        slab_line(f"Slab 2 (> {thr}% LF)", es["s2_kvah"], es["s2_rate"], es["s2_amount"])
-        slab_line("Total Energy Charge", es["s1_kvah"] + es["s2_kvah"], None,
-                  es["s1_amount"] + es["s2_amount"], bold=True, fill=_FILL_TOTAL)
+        slab_line("Normal", es["normal_kvah"], es["normal_rate"], es["normal_amount"])
+        slab_line("Peak (+ToD)", es["peak_kvah"], es["peak_rate"], es["peak_amount"])
+        slab_line("Solar (-ToD)", es["solar_kvah"], es["solar_rate"], es["solar_amount"])
+        slab_line("Total Energy Charge",
+                  es["normal_kvah"] + es["peak_kvah"] + es["solar_kvah"], None,
+                  es["normal_amount"] + es["peak_amount"] + es["solar_amount"], bold=True, fill=_FILL_TOTAL)
 
     r += 1
     ws.merge_cells(f"A{r}:D{r}")

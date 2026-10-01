@@ -40,15 +40,14 @@ const ROWS: Row[] = [
   { name: "Load Factor (%)", kind: "pct", basis: "kWh ÷ (MD × hours)", get: (r) => r.load_factor_pct },
   { name: "Days (elapsed / in month)", kind: "days", basis: "billing proration", get: (r) => r.days_elapsed },
   { name: "Charges (₹)", kind: "money", section: true },
-  { name: "Energy — up to {thr}% LF", kind: "money", basis: "slab-1 kVAh × higher rate", get: (r) => r.energy_slabs?.s1_amount },
-  { name: "Energy — above {thr}% LF", kind: "money", basis: "slab-2 kVAh × lower rate", get: (r) => r.energy_slabs?.s2_amount },
-  { name: "Net energy charge", kind: "money", basis: "slab-1 + slab-2", get: (r) => r.components?.energy, subtotal: true },
-  { name: "ToD peak surcharge", kind: "money", basis: "+₹0.30 / kVAh (18–24 h)", get: (r) => r.components?.tod_surcharge },
-  { name: "ToD solar incentive", kind: "money", basis: "−₹0.20 / kVAh (08–16 h)", get: (r) => r.components?.tod_incentive },
+  { name: "Energy — Normal band", kind: "money", basis: "normal kVAh × base rate", get: (r) => r.energy_slabs?.normal_amount },
+  { name: "Energy — Peak band (+ToD)", kind: "money", basis: "peak kVAh × base ×1.1", get: (r) => r.energy_slabs?.peak_amount },
+  { name: "Energy — Solar band (−ToD)", kind: "money", basis: "solar kVAh × base ×0.9", get: (r) => r.energy_slabs?.solar_amount },
+  { name: "Net energy charge", kind: "money", basis: "normal + peak + solar (ToD baked in)", get: (r) => r.components?.energy, subtotal: true },
   { name: "Demand / MMFC", kind: "money", basis: "billable kVA × 250 × elapsed/DIM", get: (r) => r.components?.demand },
   { name: "Overdrawal penalty", kind: "money", basis: "max(MD − CD, 0) × 250", get: (r) => r.components?.overdrawal },
   { name: "High load-factor rebate", kind: "money", basis: "if LF above threshold", get: (r) => r.components?.lf_rebate },
-  { name: "Electricity Duty (9%)", kind: "money", basis: "9% × (energy + ToD + rebate)", get: (r) => r.components?.electricity_duty },
+  { name: "Electricity Duty (9%)", kind: "money", basis: "9% × (energy + rebate)", get: (r) => r.components?.electricity_duty },
   { name: "Meter rent", kind: "money", basis: "fixed, prorated", get: (r) => r.components?.meter_rent },
   { name: "Customer service charge", kind: "money", basis: "fixed, prorated", get: (r) => r.components?.customer_service_charge },
   { name: "Result", kind: "money", section: true },
@@ -73,11 +72,10 @@ const DROWS: DRow[] = [
   { name: "Billable Demand", qk: "demand", qty: (r) => r.billable_kva },
   { name: "Load Factor", qk: "pct", qty: (r) => r.load_factor_pct },
   { name: "Charges", section: true },
-  { name: "Energy — up to {thr}% LF", qk: "energy", qty: (r) => r.energy_slabs?.s1_kvah, rate: (r) => r.energy_slabs?.s1_rate, amount: (r) => r.energy_slabs?.s1_amount },
-  { name: "Energy — above {thr}% LF", qk: "energy", qty: (r) => r.energy_slabs?.s2_kvah, rate: (r) => r.energy_slabs?.s2_rate, amount: (r) => r.energy_slabs?.s2_amount },
-  { name: "Net energy charge", qk: "energy", subtotal: true, qty: (r) => r.kvah, rate: (r) => (r.components?.energy && r.kvah ? r.components.energy / r.kvah : null), amount: (r) => r.components?.energy },
-  { name: "ToD peak surcharge", qk: "energy", qty: (r) => r.peak_kvah, rate: () => 0.30, amount: (r) => r.components?.tod_surcharge },
-  { name: "ToD solar incentive", qk: "energy", qty: (r) => r.solar_kvah, rate: () => -0.20, amount: (r) => r.components?.tod_incentive },
+  { name: "Energy — Normal band", qk: "energy", qty: (r) => r.energy_slabs?.normal_kvah, rate: (r) => r.energy_slabs?.normal_rate, amount: (r) => r.energy_slabs?.normal_amount },
+  { name: "Energy — Peak band (+ToD)", qk: "energy", qty: (r) => r.energy_slabs?.peak_kvah, rate: (r) => r.energy_slabs?.peak_rate, amount: (r) => r.energy_slabs?.peak_amount },
+  { name: "Energy — Solar band (−ToD)", qk: "energy", qty: (r) => r.energy_slabs?.solar_kvah, rate: (r) => r.energy_slabs?.solar_rate, amount: (r) => r.energy_slabs?.solar_amount },
+  { name: "Net energy charge", qk: "energy", subtotal: true, qty: (r) => r.kvah, rate: (r) => r.energy_slabs?.base_rate, amount: (r) => r.components?.energy },
   { name: "Demand / MMFC", qk: "demand", qty: (r) => r.billable_kva, rate: () => 250, amount: (r) => r.components?.demand },
   { name: "Overdrawal penalty", qk: "demand", qty: (r) => Math.max((r.md_kva ?? 0) - (r.contract_kva ?? 0), 0), rate: () => 250, amount: (r) => r.components?.overdrawal },
   { name: "High load-factor rebate", amount: (r) => r.components?.lf_rebate },
@@ -104,7 +102,7 @@ export default function RateWorkingSheet({ rates, fyMonths, monthLabel, onClose 
   const todTotal = (m.solar_kvah ?? 0) + (m.normal_kvah ?? 0) + (m.peak_kvah ?? 0);
   const div = scale === "M" ? 1000 : 1;
   const todV = (v: number) => (scale === "M" ? num(v / 1000, 1) : num(v));
-  const thr = trimZeros((m.energy_slabs?.threshold_pct ?? 60).toFixed(2));
+  const thr = trimZeros((60).toFixed(2));   // LF slab threshold (display only)
   const sub = (name: string) => name.replace("{thr}", thr);   // fill the LF threshold into slab labels
 
   const qtyText = (kind: Kind | undefined, v: number | null): string => {

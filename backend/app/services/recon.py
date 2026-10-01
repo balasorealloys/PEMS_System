@@ -50,13 +50,12 @@ def compute(db: Session, month: str) -> dict:
     def A(field):
         return float(actual[field]) if actual and actual[field] is not None else None
 
-    tod_net = c.get("tod_surcharge", 0.0) + c.get("tod_incentive", 0.0)
     demand_total = c.get("demand", 0.0) + c.get("overdrawal", 0.0)
     fixed = c.get("meter_rent", 0.0) + c.get("customer_service_charge", 0.0)
 
     components = [
-        _line("Energy Charge", c.get("energy", 0.0), A("energy_charge")),
-        _line("Time of Day (net)", tod_net, A("tod_charge"), "Peak surcharge + solar incentive"),
+        _line("Energy Charge", c.get("energy", 0.0), A("energy_charge"),
+              "ToD baked into the band rates (normal / peak / solar)"),
         _line("Demand / MMFC", demand_total, A("demand_charge"), "Incl. overdrawal penalty"),
         _line("Load-Factor Rebate", c.get("lf_rebate", 0.0), None),
         _line("Power-Factor Penalty", 0.0, A("pf_charge"), "Not modelled by the engine — actual only"),
