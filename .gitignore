@@ -46,3 +46,4 @@ logs/
 # encryption key for at-rest secrets (SAP password)
 backend/.pems_secret.key
 .pems_secret.key
+backend/.venv312/

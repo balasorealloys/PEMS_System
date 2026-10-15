@@ -37,16 +37,22 @@ export default function Dashboard() {
     api.recon(d.date.slice(0, 7)).then((r) => setExpectedBill(r.computed_total)).catch(() => {});
   }, [d?.date, d?.is_range, d?.range?.start, d?.range?.end]);
 
+  // `d` can be a no-data stub ({as_of:null, date, live, is_range}) for a date the meters
+  // never reported (e.g. a future date). These useMemos run BEFORE the as_of early-return
+  // below, so reading d.demand_trend unguarded would throw and white-screen the page —
+  // gate every chart build on real data being present.
+  const hasData = !!d && d.as_of != null;
   const spark = useMemo(
-    () => (d ? d.demand_trend.filter((x) => x.today_mw != null).map((x) => x.today_mw) : []), [d]);
-  const demandOpt = useMemo<EChartsOption | null>(() => (d ? buildDemand(d, mode) : null), [d, mode]);
-  const todOpt = useMemo<EChartsOption | null>(() => (d ? buildTod(d, mode) : null), [d, mode]);
-  const feedersOpt = useMemo<EChartsOption | null>(() => (d ? buildFeeders(d, mode) : null), [d, mode]);
+    () => (hasData ? d!.demand_trend.filter((x) => x.today_mw != null).map((x) => x.today_mw) : []), [d, hasData]);
+  const demandOpt = useMemo<EChartsOption | null>(() => (hasData ? buildDemand(d!, mode) : null), [d, mode, hasData]);
+  const todOpt = useMemo<EChartsOption | null>(() => (hasData ? buildTod(d!, mode) : null), [d, mode, hasData]);
+  const feedersOpt = useMemo<EChartsOption | null>(() => (hasData ? buildFeeders(d!, mode) : null), [d, mode, hasData]);
 
   if (error) return <div className="error">Failed to load dashboard: {String(error)}</div>;
   if (!d) return <LoadingState label="Loading live plant data…" />;
   if (d.as_of == null) {
-    return <div className="muted">No meter data for {d.range ? `${fmtDate(d.range.start)} – ${fmtDate(d.range.end)}` : "today"}.</div>;
+    const noDataFor = d.range ? `${fmtDate(d.range.start)} – ${fmtDate(d.range.end)}` : d.date ? fmtDate(d.date) : "this date";
+    return <div className="muted">No meter data for {noDataFor}. {new Date(d.date ?? "") > new Date() ? "That date is in the future." : ""}</div>;
   }
   const periodLabel = d.range ? `${fmtDate(d.range.start)} – ${fmtDate(d.range.end)}` : fmtDate(d.date!);
 
@@ -70,21 +76,21 @@ export default function Dashboard() {
 
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KPICard label={d.is_range ? "Demand (range end)" : "Current Demand"} tone="info" icon={<Zap size={17} />}
+        <KPICard label={d.is_range ? "Demand (range end)" : d.live ? "Current Demand" : "Demand (day end)"} tone="info" icon={<Zap size={17} />}
           value={d.demand.mw} unit="MW" decimals={1} spark={d.is_range ? undefined : spark}
           footnote={<span>{d.demand.utilization_pct}% of {(d.demand.contract_kva / 1000).toFixed(0)} MVA</span>} />
         <KPICard label="Power Factor" tone={pfTone(d.power_factor)} icon={<Gauge size={17} />}
           value={d.power_factor ?? 0} decimals={3}
           footnote={<StatusChip tone={pfTone(d.power_factor)}>{pfLabel(d.power_factor)}</StatusChip>} />
-        <KPICard label={d.is_range ? "Period Consumption" : "Today's Consumption"} tone="info" icon={<Activity size={17} />}
+        <KPICard label={d.is_range ? "Period Consumption" : d.live ? "Today's Consumption" : "Consumption"} tone="info" icon={<Activity size={17} />}
           value={d.consumption.today_mwh ?? 0} unit="MWh" decimals={1} spark={spark}
-          delta={d.consumption.change_pct} deltaSuffix={d.is_range ? "vs prev period" : "vs yest"} deltaGoodWhenUp={false} />
+          delta={d.consumption.change_pct} deltaSuffix={d.is_range ? "vs prev period" : d.live ? "vs yest" : "vs prev day"} deltaGoodWhenUp={false} />
         <KPICard label="Load Factor" tone="success" icon={<BatteryCharging size={17} />}
-          value={d.load_factor ?? 0} decimals={2} footnote={<span>peak-adjusted, {d.is_range ? "this period" : "today"}</span>} />
-        <KPICard label={d.is_range ? "Energy Cost (Period)" : "Energy Cost (Today)"} tone="warning" icon={<IndianRupee size={17} />}
+          value={d.load_factor ?? 0} decimals={2} footnote={<span>peak-adjusted, {d.is_range ? "this period" : d.live ? "today" : "that day"}</span>} />
+        <KPICard label={d.is_range ? "Energy Cost (Period)" : d.live ? "Energy Cost (Today)" : "Energy Cost"} tone="warning" icon={<IndianRupee size={17} />}
           value={costToday != null ? costToday / 100000 : "…"} unit={costToday != null ? "L" : ""}
           prefix={costToday != null ? "₹ " : ""} decimals={2} pending={costToday == null}
-          footnote={<span>{d.is_range ? "cost-center total, whole period" : "daily cost-center total"}</span>} />
+          footnote={<span>{d.is_range ? "cost-center total, whole period" : d.live ? "daily cost-center total" : "cost-center total, that day"}</span>} />
         <KPICard label="Expected Monthly Bill" tone="danger" icon={<Receipt size={17} />}
           value={expectedBill != null ? expectedBill / 1e7 : "…"} unit={expectedBill != null ? "Cr" : ""}
           prefix={expectedBill != null ? "₹ " : ""} decimals={2} pending={expectedBill == null}
@@ -96,7 +102,9 @@ export default function Dashboard() {
         <Card className="lg:col-span-2">
           <CardHead title={d.is_range ? "Daily Consumption Trend" : "24-Hour Demand Trend"} icon={<TrendingDown size={16} />}
             right={<span className="text-xs text-muted-foreground">
-              {d.is_range ? "MWh · This period vs previous period" : "MW · Today vs Yesterday"}
+              {d.is_range ? "MWh · This period vs previous period"
+                : d.live ? "MW · Today vs Yesterday"
+                : `MW · ${fmtShort(d.date!)} vs ${fmtShort(shiftIso(d.date!, -1))}`}
             </span>} />
           <CardBody>{demandOpt && <EChart option={demandOpt} height={260} />}</CardBody>
         </Card>
@@ -168,8 +176,10 @@ function buildDemand(d: Executive, mode: "light" | "dark"): EChartsOption {
   const ax = axisColors(mode);
   const isRange = !!d.is_range;
   const unit = isRange ? "MWh" : "MW";
-  const curLabel = isRange ? "This period" : "Today";
-  const prevLabel = isRange ? "Previous period" : "Yesterday";
+  // For a single historical day, label the lines with the actual dates instead of
+  // "Today"/"Yesterday" (which are only correct for the live/today view).
+  const curLabel = isRange ? "This period" : d.live ? "Today" : fmtShort(d.date);
+  const prevLabel = isRange ? "Previous period" : d.live ? "Yesterday" : fmtShort(shiftIso(d.date, -1));
   return {
     grid: { left: 8, right: 12, top: 24, bottom: 4, containLabel: true },
     legend: { data: [curLabel, prevLabel], right: 0, top: 0, itemWidth: 14, itemHeight: 8, textStyle: { color: ax.text, fontSize: 11 } },
@@ -254,3 +264,11 @@ function timeOfDayGreeting(iso: string | null) {
   return h < 12 ? "Good Morning" : h < 17 ? "Good Afternoon" : "Good Evening";
 }
 function fmtDate(s: string) { return new Date(s).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); }
+function fmtShort(s: string | null | undefined) { return s ? new Date(s).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : ""; }
+// shift an ISO yyyy-mm-dd by N days, staying on local wall-clock (no TZ drift)
+function shiftIso(s: string | null | undefined, days: number) {
+  if (!s) return "";
+  const [y, m, d] = s.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + days);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}

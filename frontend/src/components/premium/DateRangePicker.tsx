@@ -41,9 +41,9 @@ function monthGrid(month: Date): Date[] {
 const WD = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
 function Month({
-  month, start, end, hover, onPick, onHover, onSelectMonth, onSelectYear,
+  month, start, end, hover, now, onPick, onHover, onSelectMonth, onSelectYear,
 }: {
-  month: Date; start: Date | null; end: Date | null; hover: Date | null;
+  month: Date; start: Date | null; end: Date | null; hover: Date | null; now: Date;
   onPick: (d: Date) => void; onHover: (d: Date | null) => void;
   onSelectMonth: (m: Date) => void; onSelectYear: (m: Date) => void;
 }) {
@@ -69,17 +69,20 @@ function Month({
           const hi = start && rangeEnd ? (isAfter(rangeEnd, start) ? rangeEnd : start) : null;
           const inRange = lo && hi && isWithinInterval(d, { start: lo, end: hi });
           const edge = isStart || isEnd;
+          const future = isAfter(d, now) && !isSameDay(d, now);   // no future dates
           return (
             <button
               key={i}
-              onClick={() => onPick(d)}
-              onMouseEnter={() => onHover(d)}
+              disabled={future}
+              onClick={() => !future && onPick(d)}
+              onMouseEnter={() => !future && onHover(d)}
               className={cn(
                 "mx-auto grid h-7 w-7 place-items-center rounded-md text-xs tabular-nums transition-colors",
                 !inMonth && "text-muted-foreground/40",
+                future && "cursor-not-allowed text-muted-foreground/30",
                 inRange && !edge && "bg-primary/12",
                 edge && "bg-primary text-primary-foreground font-semibold",
-                !edge && inMonth && "hover:bg-accent",
+                !edge && !future && inMonth && "hover:bg-accent",
               )}
             >
               {d.getDate()}
@@ -134,17 +137,26 @@ export default function DateRangePicker() {
     commit(new Date(y, 0, 1), hi, "Custom");
   };
 
-  const label = range.preset !== "Custom"
-    ? range.preset
-    : range.start === range.end
-      ? format(parse(range.start), "dd MMM yyyy")
-      : `${format(parse(range.start), "dd MMM")} – ${format(parse(range.end), "dd MMM yyyy")}`;
+  const todayIso = iso(now);
+  // A single day shows "Today" only when it really is today — any other single day
+  // shows its date (not the stale preset name). Multi-day presets keep their label.
+  const label =
+    range.start === range.end
+      ? range.start === todayIso ? "Today" : format(parse(range.start), "dd MMM yyyy")
+      : range.preset !== "Custom"
+        ? range.preset
+        : `${format(parse(range.start), "dd MMM")} – ${format(parse(range.end), "dd MMM yyyy")}`;
+
+  // can't go past today — the plant has no future data (and it used to crash the page)
+  const atLatest = range.end >= todayIso;
 
   // step the whole window backward / forward by its own width (1 day for a single day)
   const shift = (dir: -1 | 1) => {
     const s = parse(range.start), e = parse(range.end);
     const width = Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
-    setRange({ start: iso(addDays(s, dir * width)), end: iso(addDays(e, dir * width)), preset: "Custom" });
+    const ns = addDays(s, dir * width), ne = addDays(e, dir * width);
+    if (dir === 1 && iso(ne) > todayIso) return;   // never advance into the future
+    setRange({ start: iso(ns), end: iso(ne), preset: "Custom" });
   };
 
   return (
@@ -160,8 +172,11 @@ export default function DateRangePicker() {
         <CalendarDays size={15} className="text-muted-foreground" />
         {label}
       </button>
-      <button title="Next" onClick={() => shift(1)}
-        className="grid h-8 w-6 place-items-center rounded-lg border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+      <button title={atLatest ? "Already at the latest date" : "Next"} onClick={() => shift(1)} disabled={atLatest}
+        className={cn(
+          "grid h-8 w-6 place-items-center rounded-lg border bg-card text-muted-foreground transition-colors",
+          atLatest ? "cursor-not-allowed opacity-40" : "hover:bg-accent hover:text-foreground",
+        )}>
         <ChevronRight size={15} />
       </button>
 
@@ -193,8 +208,8 @@ export default function DateRangePicker() {
               </button>
             </div>
             <div className="flex gap-5">
-              <Month month={viewMonth} start={start} end={end} hover={hover} onPick={pick} onHover={setHover} onSelectMonth={selectMonth} onSelectYear={selectYear} />
-              <Month month={addMonths(viewMonth, 1)} start={start} end={end} hover={hover} onPick={pick} onHover={setHover} onSelectMonth={selectMonth} onSelectYear={selectYear} />
+              <Month month={viewMonth} start={start} end={end} hover={hover} now={now} onPick={pick} onHover={setHover} onSelectMonth={selectMonth} onSelectYear={selectYear} />
+              <Month month={addMonths(viewMonth, 1)} start={start} end={end} hover={hover} now={now} onPick={pick} onHover={setHover} onSelectMonth={selectMonth} onSelectYear={selectYear} />
             </div>
             <div className="mt-3 border-t pt-2 text-center text-[11px] text-muted-foreground">
               {start && !end
