@@ -1,10 +1,15 @@
 """Authentication + activity tracking against the intranet tables.
 
-Single sign-on with the existing intranet credentials:
-  * balcorpdb.intranet_user_login   — EMPID + SHA-1(USER_PWD), STATUS='A' active
-  * balcorpdb.sap_employee_details  — name / designation / department / email
+Single sign-on with the existing intranet credentials. These tables now live in the
+PRIMARY Postgres database (the corporate balcorpdb was consolidated into Postgres),
+so auth uses the same engine as the rest of PEMS — there is no separate MySQL anymore:
+  * balcorpdb.intranet_user_login       — empid + SHA-1(user_pwd), status='A' active
+  * sap_odata_api.sap_employee_details  — name / designation / department / email
   * balcorpdb.digital_apps_user_sessions — one row per PEMS login (app_source='PEMS')
   * balcorpdb.digital_apps_page_views    — one row per page view
+
+Postgres folds unquoted identifiers to lowercase, so result keys come back lowercase
+(empid, user_pwd, …) — accessed as such below.
 
 Passwords are never stored or logged by PEMS — we only compare the SHA-1 hash of
 what the user types to the hash already held in intranet_user_login.
@@ -18,7 +23,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 LOGIN_TBL = "balcorpdb.intranet_user_login"
-EMP_TBL = "balcorpdb.sap_employee_details"
+EMP_TBL = "sap_odata_api.sap_employee_details"
 SESS_TBL = "balcorpdb.digital_apps_user_sessions"
 VIEW_TBL = "balcorpdb.digital_apps_page_views"
 APP_SOURCE = "PEMS"
@@ -54,29 +59,30 @@ def authenticate(db: Session, empid: str, password: str) -> dict | None:
     """Validate EMPID + password against the intranet login table. Returns the
     employee profile on success, else None. Assumes USER_PWD = SHA-1(password)."""
     row = db.execute(text(
-        f"SELECT EMPID, USER_PWD, STATUS FROM {LOGIN_TBL} WHERE EMPID = :e"),
+        f"SELECT empid, user_pwd, status FROM {LOGIN_TBL} WHERE empid = :e"),
         {"e": empid}).mappings().first()
-    if not row or (row["STATUS"] or "").upper() != "A":
+    if not row or (row["status"] or "").upper() != "A":
         return None
-    if (row["USER_PWD"] or "").lower() != _sha1(password).lower():
+    if (row["user_pwd"] or "").lower() != _sha1(password).lower():
         return None
     return employee(db, empid)
 
 
 def employee(db: Session, empid: str) -> dict:
     e = db.execute(text(
-        f"""SELECT EMPID, EMPNAME, TITLE, EMPDESG, EMPDEPT, EMAILID, LOCATION, PLANT_CD, STATUS
-            FROM {EMP_TBL} WHERE EMPID = :e"""), {"e": empid}).mappings().first()
+        f"""SELECT empid, empname, title, empdesg, empdept, emailid, location, cost_center
+            FROM {EMP_TBL} WHERE empid = :e"""), {"e": empid}).mappings().first()
     if not e:
         return {"emp_id": empid, "name": empid, "role": None, "department": None,
                 "email": None, "title": None, "location": None, "plant": None,
-                "pems_role": pems_role(empid)}
+                "cost_center": None, "pems_role": pems_role(empid)}
     s = lambda v: (v or "").strip() or None  # noqa: E731
     return {
-        "emp_id": e["EMPID"], "name": s(e["EMPNAME"]) or empid, "title": s(e["TITLE"]),
-        "role": s(e["EMPDESG"]), "department": s(e["EMPDEPT"]), "email": s(e["EMAILID"]),
-        "location": s(e["LOCATION"]), "plant": s(e["PLANT_CD"]),
-        "pems_role": pems_role(e["EMPID"]),   # access role within PEMS (Postgres)
+        "emp_id": e["empid"], "name": s(e["empname"]) or empid, "title": s(e["title"]),
+        "role": s(e["empdesg"]), "department": s(e["empdept"]), "email": s(e["emailid"]),
+        "location": s(e["location"]), "plant": None,  # PG directory has no plant code
+        "cost_center": s(e["cost_center"]),
+        "pems_role": pems_role(e["empid"]),   # access role within PEMS (Postgres)
     }
 
 
@@ -115,7 +121,7 @@ def get_session(db: Session, sid: str | None) -> dict | None:
         f"""SELECT session_id, emp_id, emp_name, role, department, last_active_at
             FROM {SESS_TBL}
             WHERE session_id = :sid AND is_active = 1
-              AND last_active_at > (NOW() - INTERVAL {IDLE_HOURS} HOUR)"""),
+              AND last_active_at > (NOW() - INTERVAL '{IDLE_HOURS} hours')"""),
         {"sid": sid}).mappings().first()
     return dict(row) if row else None
 

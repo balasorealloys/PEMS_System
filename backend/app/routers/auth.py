@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
-from app.db import get_auth_db
+from app.db import get_db
 from app.services import auth
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -15,7 +15,7 @@ MAX_AGE = auth.IDLE_HOURS * 3600
 
 @router.post("/login")
 def login(response: Response, request: Request, body: dict = Body(...),
-          db: Session = Depends(get_auth_db)) -> dict:
+          db: Session = Depends(get_db)) -> dict:
     empid = (body.get("empid") or "").strip()
     password = body.get("password") or ""
     if not empid or not password:
@@ -30,7 +30,7 @@ def login(response: Response, request: Request, body: dict = Body(...),
 
 
 @router.get("/me")
-def me(request: Request, db: Session = Depends(get_auth_db)) -> dict:
+def me(request: Request, db: Session = Depends(get_db)) -> dict:
     s = auth.get_session(db, request.cookies.get(COOKIE))
     if not s:
         raise HTTPException(401, "Not authenticated.")
@@ -38,7 +38,7 @@ def me(request: Request, db: Session = Depends(get_auth_db)) -> dict:
 
 
 @router.post("/logout")
-def logout(response: Response, request: Request, db: Session = Depends(get_auth_db)) -> dict:
+def logout(response: Response, request: Request, db: Session = Depends(get_db)) -> dict:
     sid = request.cookies.get(COOKIE)
     if sid:
         auth.end_session(db, sid, "LOGOUT")
@@ -47,7 +47,7 @@ def logout(response: Response, request: Request, db: Session = Depends(get_auth_
 
 
 @router.post("/track")
-def track(request: Request, body: dict = Body(...), db: Session = Depends(get_auth_db)) -> dict:
+def track(request: Request, body: dict = Body(...), db: Session = Depends(get_db)) -> dict:
     sid = request.cookies.get(COOKIE)
     s = auth.get_session(db, sid)
     if not s:
@@ -58,7 +58,7 @@ def track(request: Request, body: dict = Body(...), db: Session = Depends(get_au
 
 
 @router.post("/heartbeat")
-def heartbeat(request: Request, db: Session = Depends(get_auth_db)) -> dict:
+def heartbeat(request: Request, db: Session = Depends(get_db)) -> dict:
     sid = request.cookies.get(COOKIE)
     if sid:
         auth.touch(db, sid)

@@ -1,47 +1,45 @@
 """PEMS role management (admin-only): grant/revoke access roles per employee.
 
-pems_user_role lives in the PRIMARY (Postgres) database; the employee directory
-(sap_employee_details) lives in the AUTH (MySQL) database. Those can no longer be
-joined in one SQL statement, so the two are queried separately and merged in Python.
+Both pems_user_role and the employee directory (sap_odata_api.sap_employee_details)
+now live in the same Postgres database, so the directory lookup uses the caller's
+primary session — no separate auth engine anymore.
 """
 from __future__ import annotations
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
-from app.db import AuthSessionLocal
 from app.services.auth import EMP_TBL, ROLE_RANK
 
 ROLES = ("admin", "manager", "viewer")
 _ROLE_ORDER = "CASE role WHEN 'admin' THEN 1 WHEN 'manager' THEN 2 ELSE 3 END"
 
 
-def _employees(emp_ids: list[str]) -> dict[str, dict]:
-    """Directory rows for the given EMPIDs, from the auth (MySQL) database."""
+def _employees(db: Session, emp_ids: list[str]) -> dict[str, dict]:
+    """Directory rows for the given EMPIDs, from the Postgres employee table."""
     if not emp_ids:
         return {}
-    with AuthSessionLocal() as adb:
-        rows = adb.execute(text(
-            f"SELECT EMPID, EMPNAME, EMPDESG, EMPDEPT FROM {EMP_TBL} WHERE EMPID IN :ids")
-            .bindparams(__import__("sqlalchemy").bindparam("ids", expanding=True)),
-            {"ids": emp_ids}).mappings().all()
-    return {str(r["EMPID"]): r for r in rows}
+    rows = db.execute(text(
+        f"SELECT empid, empname, empdesg, empdept FROM {EMP_TBL} WHERE empid IN :ids")
+        .bindparams(bindparam("ids", expanding=True)),
+        {"ids": emp_ids}).mappings().all()
+    return {str(r["empid"]): r for r in rows}
 
 
 def list_roles(db: Session) -> list[dict]:
-    """Assigned roles (Postgres), joined to the employee directory (MySQL) in Python."""
+    """Assigned roles joined to the employee directory (both in Postgres), merged here."""
     rows = db.execute(text(
         f"SELECT emp_id, role, granted_by, updated_at FROM pems_user_role "
         f"ORDER BY {_ROLE_ORDER}, emp_id")).mappings().all()
-    emps = _employees([str(r["emp_id"]) for r in rows])
+    emps = _employees(db, [str(r["emp_id"]) for r in rows])
     out = []
     for r in rows:
         e = emps.get(str(r["emp_id"]), {})
         out.append({
             "emp_id": r["emp_id"], "role": r["role"],
-            "name": ((e.get("EMPNAME") or r["emp_id"]) or "").strip() or r["emp_id"],
-            "designation": (e.get("EMPDESG") or "").strip() or None,
-            "department": (e.get("EMPDEPT") or "").strip() or None,
+            "name": ((e.get("empname") or r["emp_id"]) or "").strip() or r["emp_id"],
+            "designation": (e.get("empdesg") or "").strip() or None,
+            "department": (e.get("empdept") or "").strip() or None,
             "granted_by": r["granted_by"],
             "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
         })
@@ -67,16 +65,15 @@ def delete_role(db: Session, emp_id: str) -> list[dict]:
 
 
 def search_employees(db: Session, q: str, limit: int = 15) -> list[dict]:
-    """Employee lookup for the role-grant picker (by name or EMPID) — auth/MySQL DB."""
+    """Employee lookup for the role-grant picker (by name or EMPID) — Postgres directory."""
     q = (q or "").strip()
     if len(q) < 2:
         return []
-    with AuthSessionLocal() as adb:
-        rows = adb.execute(text(
-            f"""SELECT EMPID, EMPNAME, EMPDESG, EMPDEPT FROM {EMP_TBL}
-                WHERE EMPNAME LIKE :like OR EMPID LIKE :like
-                ORDER BY EMPNAME LIMIT :n"""),
-            {"like": f"%{q}%", "n": limit}).mappings().all()
-    return [{"emp_id": r["EMPID"], "name": (r["EMPNAME"] or r["EMPID"]).strip(),
-             "designation": (r["EMPDESG"] or "").strip() or None,
-             "department": (r["EMPDEPT"] or "").strip() or None} for r in rows]
+    rows = db.execute(text(
+        f"""SELECT empid, empname, empdesg, empdept FROM {EMP_TBL}
+            WHERE empname ILIKE :like OR empid LIKE :like
+            ORDER BY empname LIMIT :n"""),
+        {"like": f"%{q}%", "n": limit}).mappings().all()
+    return [{"emp_id": r["empid"], "name": (r["empname"] or r["empid"]).strip(),
+             "designation": (r["empdesg"] or "").strip() or None,
+             "department": (r["empdept"] or "").strip() or None} for r in rows]

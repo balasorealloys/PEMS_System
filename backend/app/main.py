@@ -50,15 +50,15 @@ def _check_auth(sid: str | None, method: str, rel_path: str) -> tuple[dict | Non
     Returns (session, role_error). session is None if unauthenticated; role_error is
     the minimum role required if a write route's role check failed.
     """
-    from app.db import AuthSessionLocal
+    from app.db import SessionLocal
     from app.services import auth as auth_svc
-    with AuthSessionLocal() as db:   # sessions live in the auth (MySQL) database
+    with SessionLocal() as db:   # sessions now live in the primary Postgres (balcorpdb schema)
         s = auth_svc.get_session(db, sid)
         if not s:
             return None, None
         # keeps activity fresh, but skip the write if it was touched moments ago —
         # a page load fires several API calls in a burst, and each touch is a second
-        # round trip to the (WAN) auth database on top of the session check itself.
+        # round trip to the database on top of the session check itself.
         last = s.get("last_active_at")
         if last is None or datetime.now() - last > _TOUCH_THROTTLE:
             auth_svc.touch(db, sid)
@@ -74,9 +74,9 @@ async def require_auth(request: Request, call_next):
     """Gate every /api route behind a valid intranet session, except the auth
     handshake and health/docs. Keeps activity fresh by touching the session.
 
-    The check itself is a blocking DB call (MySQL over the intranet WAN) — run via
-    run_in_threadpool so it doesn't stall the single-worker event loop and serialize
-    every other in-flight request behind it.
+    The check itself is a blocking DB call (Postgres) — run via run_in_threadpool so
+    it doesn't stall the single-worker event loop and serialize every other in-flight
+    request behind it.
     """
     p = request.url.path
     prefix = settings.api_prefix

@@ -1,14 +1,12 @@
-"""SQLAlchemy engines and session management.
+"""SQLAlchemy engine and session management.
 
-PEMS uses two databases:
-  * primary  — PostgreSQL (corpappdb, schema "pems"): all pems_* tables + the synced
-    raw meter data. Use ``get_db`` / ``SessionLocal``.
-  * auth     — MySQL (balcorpdb): intranet SSO login, sessions, page-views. Use
-    ``get_auth_db`` / ``AuthSessionLocal``.
+PEMS runs on a single PostgreSQL database. The ``pems`` schema holds the pems_* tables
+and the synced raw meter data; the corporate ``balcorpdb`` and ``sap_odata_api`` schemas
+(consolidated into the same Postgres) hold intranet SSO login, sessions, page-views and
+the employee directory. Everything uses ``get_db`` / ``SessionLocal``.
 
-Keeping both connections defined in exactly one place is what lets the dialect be
-swapped via configuration (the MySQL→Postgres move was a config change, not a
-rewrite of the connection layer).
+The legacy MySQL auth engine has been retired — ``get_auth_db`` / ``AuthSessionLocal``
+remain as aliases of the primary Postgres session for backward compatibility.
 """
 from __future__ import annotations
 
@@ -35,14 +33,11 @@ engine = create_engine(
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
-# Auth database (MySQL) — separate engine; intranet login/session/page-view tables.
-auth_engine = create_engine(
-    settings.auth_sqlalchemy_url,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-    future=True,
-)
-AuthSessionLocal = sessionmaker(bind=auth_engine, autoflush=False, expire_on_commit=False)
+# The intranet auth tables (login, sessions, page-views, employee directory) now live
+# in the same Postgres database under the balcorpdb / sap_odata_api schemas, so the old
+# separate MySQL engine is gone. These aliases keep any legacy references pointing at
+# the primary Postgres session.
+AuthSessionLocal = SessionLocal
 
 
 class Base(DeclarativeBase):
@@ -58,10 +53,5 @@ def get_db() -> Iterator[Session]:
         db.close()
 
 
-def get_auth_db() -> Iterator[Session]:
-    """FastAPI dependency yielding an auth (MySQL / balcorpdb) session."""
-    db = AuthSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# Legacy alias — auth now shares the primary Postgres engine.
+get_auth_db = get_db
