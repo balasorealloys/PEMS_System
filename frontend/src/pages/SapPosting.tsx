@@ -345,9 +345,16 @@ function ExpandableRows({ day, open, onToggle, detail, cols, children }: {
 /* The per-cost-center table — shared by the single-day view and every inline expansion,
    so the breakdown looks identical everywhere. Shows a totals footer for clarity. */
 function CostCenterTable({ pv, rows, compact }: { pv: SapPreview; rows: SapRow[]; compact?: boolean }) {
+  // Prefer the STORED rows (what was actually staged/posted) — they carry the rate and
+  // amount FROZEN at posting time. Only fall back to the live preview for a day not yet
+  // staged (no stored rows); otherwise history would re-price at today's drifted MTD rate
+  // and mismatch what was really sent to SAP.
   const statusBy = Object.fromEntries(rows.map((r) => [r.sap_costcenter, r.status]));
-  if (pv.rows.length === 0)
+  const display = rows.length > 0 ? rows : pv.rows;
+  if (display.length === 0)
     return <div className="px-4 py-6 text-center text-sm text-muted-foreground">No cost-center consumption for this day.</div>;
+  const totalKwh = display.reduce((s, r) => s + (r.consumption || 0), 0);
+  const totalAmt = display.reduce((s, r) => s + (r.amount || 0), 0);
   return (
     <div className={compact ? "" : "overflow-hidden rounded-xl border"}>
       <table className="w-full text-sm">
@@ -362,23 +369,23 @@ function CostCenterTable({ pv, rows, compact }: { pv: SapPreview; rows: SapRow[]
           </tr>
         </thead>
         <tbody>
-          {pv.rows.map((r) => (
+          {display.map((r) => (
             <tr key={r.sap_costcenter} className="border-b border-border/40 last:border-0">
               <td className="px-4 py-2 font-mono text-xs">{r.sap_costcenter}</td>
               <td className="py-2">{r.costcenter_desc}</td>
               <td className="py-2 text-right tabular-nums">{r.consumption.toLocaleString("en-IN")}</td>
               <td className="py-2 text-right tabular-nums text-muted-foreground">{r.unit_rate?.toFixed(3)}</td>
               <td className="py-2 text-right font-semibold tabular-nums">{inr(r.amount)}</td>
-              <td className="px-4 py-2 text-right"><StatusPill s={statusBy[r.sap_costcenter] ?? "preview"} /></td>
+              <td className="px-4 py-2 text-right"><StatusPill s={statusBy[r.sap_costcenter] ?? r.status ?? "preview"} /></td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr className="border-t bg-muted/30 font-semibold">
-            <td className="px-4 py-2" colSpan={2}>Total · {pv.rows.length} cost centers</td>
-            <td className="py-2 text-right tabular-nums">{inr(pv.total_consumption)}</td>
+            <td className="px-4 py-2" colSpan={2}>Total · {display.length} cost centers</td>
+            <td className="py-2 text-right tabular-nums">{inr(totalKwh)}</td>
             <td className="py-2"></td>
-            <td className="py-2 text-right tabular-nums">{inr(pv.total_amount)}</td>
+            <td className="py-2 text-right tabular-nums">{inr(totalAmt)}</td>
             <td className="px-4 py-2"></td>
           </tr>
         </tfoot>
