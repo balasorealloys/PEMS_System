@@ -159,10 +159,13 @@ def history(db: Session, limit: int = 90) -> list[dict]:
                   COUNT(*) FILTER (WHERE status='pending') AS pending,
                   COUNT(*) FILTER (WHERE status='failed') AS failed,
                   COUNT(*) FILTER (WHERE status='confirmed') AS confirmed,
-                  MAX(posted_at) AS last_posted, MAX(posted_by) AS posted_by
+                  MAX(posted_at) AS last_posted, MAX(posted_by) AS posted_by,
+                  MAX(rate_source) AS rate_source, MAX(computed_rate) AS computed_rate
            FROM pems_sap_posting GROUP BY posting_date ORDER BY posting_date DESC LIMIT :l"""
     ), {"l": limit}).mappings().all()
-    return [dict(r) for r in rows]
+    f = lambda v: float(v) if v is not None else None  # noqa: E731
+    return [{**r, "total_amount": f(r["total_amount"]), "total_kwh": f(r["total_kwh"]),
+             "computed_rate": f(r["computed_rate"])} for r in rows]
 
 
 # --- multi-day helpers (post one document per day, for a whole range) ------------
@@ -240,6 +243,9 @@ def preview(db: Session, posting_date: str, unit_rate: float | None = None) -> d
     d = datetime.strptime(posting_date, "%Y-%m-%d")
     energy = accounting.costcenter_energy(db, d, d + timedelta(days=1))
     rate, rate_source = _rate(db, unit_rate, posting_date)
+    # the engine's computed rate, kept alongside for the "manual vs actual" audit view.
+    # When the rate wasn't manually overridden it IS the computed rate (no recompute).
+    computed = rate if rate_source != "manual" else _computed_rate(db, posting_date)
     selected = _selected_ccs(db)   # empty = all cost centers
     rows, total_kwh, total_amt = [], 0.0, 0.0
     for c in energy["cost_centers"]:
@@ -252,8 +258,10 @@ def preview(db: Session, posting_date: str, unit_rate: float | None = None) -> d
             "posting_date": posting_date, "sap_costcenter": c["sap_costcenter"],
             "costcenter_desc": c["description"], "consumption": round(kwh, 2),
             "unit_rate": rate, "amount": amt, "status": "preview",
+            "rate_source": rate_source, "computed_rate": computed,
         })
     return {"posting_date": posting_date, "unit_rate": rate, "rate_source": rate_source,
+            "computed_rate": computed,
             "total_consumption": round(total_kwh, 2), "total_amount": round(total_amt, 2),
             "rows": rows, "source": "KW-integration daily energy x unit rate",
             "hours_of_data": energy["hours"]}
@@ -265,15 +273,18 @@ def stage(db: Session, posting_date: str, unit_rate: float | None = None) -> dic
     for r in pv["rows"]:
         db.execute(text(
             """INSERT INTO pems_sap_posting
-                 (posting_date, sap_costcenter, costcenter_desc, consumption, unit_rate, amount, status)
-               VALUES (:d,:cc,:desc,:cons,:rate,:amt,'pending')
+                 (posting_date, sap_costcenter, costcenter_desc, consumption, unit_rate, amount,
+                  status, rate_source, computed_rate)
+               VALUES (:d,:cc,:desc,:cons,:rate,:amt,'pending',:src,:crate)
                ON CONFLICT (posting_date, sap_costcenter) DO UPDATE SET
                  costcenter_desc=EXCLUDED.costcenter_desc, consumption=EXCLUDED.consumption,
                  unit_rate=EXCLUDED.unit_rate, amount=EXCLUDED.amount,
+                 rate_source=EXCLUDED.rate_source, computed_rate=EXCLUDED.computed_rate,
                  status=CASE WHEN pems_sap_posting.status IN ('confirmed','posted')
                              THEN pems_sap_posting.status ELSE 'pending' END"""
         ), {"d": r["posting_date"], "cc": r["sap_costcenter"], "desc": r["costcenter_desc"],
-            "cons": r["consumption"], "rate": r["unit_rate"], "amt": r["amount"]})
+            "cons": r["consumption"], "rate": r["unit_rate"], "amt": r["amount"],
+            "src": r.get("rate_source"), "crate": r.get("computed_rate")})
     db.commit()
     return {"posting_date": posting_date, "staged": len(pv["rows"])}
 
@@ -281,14 +292,14 @@ def stage(db: Session, posting_date: str, unit_rate: float | None = None) -> dic
 def status(db: Session, posting_date: str) -> list[dict]:
     rows = db.execute(text(
         """SELECT posting_date, sap_costcenter, costcenter_desc, consumption, unit_rate, amount,
-                  status, sap_doc_no FROM pems_sap_posting
+                  status, sap_doc_no, rate_source, computed_rate FROM pems_sap_posting
            WHERE posting_date=:d ORDER BY amount DESC"""
     ), {"d": posting_date}).mappings()
     # cast the NUMERIC columns to float so the JSON carries numbers (not Decimal→string),
     # matching preview() and the SapRow type — the UI calls .toFixed() on these.
     f = lambda v: float(v) if v is not None else None  # noqa: E731
     return [{**r, "consumption": f(r["consumption"]), "unit_rate": f(r["unit_rate"]),
-             "amount": f(r["amount"])} for r in rows]
+             "amount": f(r["amount"]), "computed_rate": f(r["computed_rate"])} for r in rows]
 
 
 def _csrf_session(client: httpx.Client, base: str, service: str, client_no: str,

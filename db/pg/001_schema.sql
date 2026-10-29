@@ -173,6 +173,8 @@ CREATE TABLE IF NOT EXISTS pems_sap_posting (
     consumption     NUMERIC(19,3) NOT NULL,
     unit_rate       NUMERIC(12,4),
     amount          NUMERIC(19,2),
+    rate_source     TEXT,                  -- 'manual' | 'computed' | 'default'
+    computed_rate   NUMERIC(12,4),         -- the engine rate at stage time (for manual-vs-actual)
     status          VARCHAR(12)  NOT NULL DEFAULT 'pending',
     sap_doc_no      VARCHAR(30),
     request_json    JSONB,

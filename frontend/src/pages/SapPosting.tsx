@@ -293,7 +293,18 @@ export default function SapPosting({ onNavigate }: { onNavigate: (v: ViewKey) =>
                     </td>
                     <td className="py-2 text-right tabular-nums">{h.rows_ct}</td>
                     <td className="py-2 text-right tabular-nums">{inr(h.total_amount)}</td>
-                    <td className="py-2 text-right tabular-nums text-muted-foreground">{rate3(h.total_kwh ? Number(h.total_amount ?? 0) / Number(h.total_kwh) : null)}</td>
+                    <td className="py-2 text-right tabular-nums text-muted-foreground">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {h.rate_source === "manual" && (
+                          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-600 dark:text-amber-400"
+                            title="Rate was entered manually (override), not the computed tariff">manual</span>
+                        )}
+                        <span>{rate3(h.total_kwh ? Number(h.total_amount ?? 0) / Number(h.total_kwh) : null)}</span>
+                      </div>
+                      {h.rate_source === "manual" && h.computed_rate != null && (
+                        <div className="text-[10px] font-normal text-muted-foreground/70">actual {rate3(Number(h.computed_rate))}</div>
+                      )}
+                    </td>
                     <td className="py-2 text-center"><HistStatus h={h} /></td>
                     <td className="py-2">{h.posted_by ?? <span className="text-muted-foreground">—</span>}</td>
                     <td className="px-5 py-2 text-right text-xs text-muted-foreground">

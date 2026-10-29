@@ -135,9 +135,11 @@ export interface SapRow {
   posting_date: string; sap_costcenter: string; costcenter_desc: string;
   consumption: number; unit_rate: number | null; amount: number | null;
   status: string; sap_doc_no?: string | null;
+  rate_source?: string | null; computed_rate?: number | null;
 }
 export interface SapPreview {
   posting_date: string; unit_rate: number; rate_source?: string;
+  computed_rate?: number | null;
   total_consumption: number; total_amount: number;
   rows: SapRow[]; source: string;
 }
@@ -150,6 +152,7 @@ export interface SapHistoryDay {
   posting_date: string; rows_ct: number; total_amount: number | null; total_kwh: number | null;
   posted: number; pending: number; failed: number; confirmed: number;
   last_posted: string | null; posted_by: string | null;
+  rate_source?: string | null; computed_rate?: number | null;
 }
 export interface SapDaySummary {
   posting_date: string; rows_ct: number; total_kwh: number; total_amount: number;
