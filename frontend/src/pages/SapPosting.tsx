@@ -353,8 +353,10 @@ function CostCenterTable({ pv, rows, compact }: { pv: SapPreview; rows: SapRow[]
   const display = rows.length > 0 ? rows : pv.rows;
   if (display.length === 0)
     return <div className="px-4 py-6 text-center text-sm text-muted-foreground">No cost-center consumption for this day.</div>;
-  const totalKwh = display.reduce((s, r) => s + (r.consumption || 0), 0);
-  const totalAmt = display.reduce((s, r) => s + (r.amount || 0), 0);
+  // coerce with Number(): stored rows (from /status) serialise NUMERIC as strings, and
+  // "6.42".toFixed() would throw — Number() makes both string and number inputs safe.
+  const totalKwh = display.reduce((s, r) => s + Number(r.consumption || 0), 0);
+  const totalAmt = display.reduce((s, r) => s + Number(r.amount || 0), 0);
   return (
     <div className={compact ? "" : "overflow-hidden rounded-xl border"}>
       <table className="w-full text-sm">
@@ -373,8 +375,8 @@ function CostCenterTable({ pv, rows, compact }: { pv: SapPreview; rows: SapRow[]
             <tr key={r.sap_costcenter} className="border-b border-border/40 last:border-0">
               <td className="px-4 py-2 font-mono text-xs">{r.sap_costcenter}</td>
               <td className="py-2">{r.costcenter_desc}</td>
-              <td className="py-2 text-right tabular-nums">{r.consumption.toLocaleString("en-IN")}</td>
-              <td className="py-2 text-right tabular-nums text-muted-foreground">{r.unit_rate?.toFixed(3)}</td>
+              <td className="py-2 text-right tabular-nums">{Number(r.consumption).toLocaleString("en-IN")}</td>
+              <td className="py-2 text-right tabular-nums text-muted-foreground">{r.unit_rate == null ? "—" : Number(r.unit_rate).toFixed(3)}</td>
               <td className="py-2 text-right font-semibold tabular-nums">{inr(r.amount)}</td>
               <td className="px-4 py-2 text-right"><StatusPill s={statusBy[r.sap_costcenter] ?? r.status ?? "preview"} /></td>
             </tr>

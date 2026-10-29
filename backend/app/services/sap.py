@@ -279,11 +279,16 @@ def stage(db: Session, posting_date: str, unit_rate: float | None = None) -> dic
 
 
 def status(db: Session, posting_date: str) -> list[dict]:
-    return [dict(r) for r in db.execute(text(
+    rows = db.execute(text(
         """SELECT posting_date, sap_costcenter, costcenter_desc, consumption, unit_rate, amount,
                   status, sap_doc_no FROM pems_sap_posting
            WHERE posting_date=:d ORDER BY amount DESC"""
-    ), {"d": posting_date}).mappings()]
+    ), {"d": posting_date}).mappings()
+    # cast the NUMERIC columns to float so the JSON carries numbers (not Decimal→string),
+    # matching preview() and the SapRow type — the UI calls .toFixed() on these.
+    f = lambda v: float(v) if v is not None else None  # noqa: E731
+    return [{**r, "consumption": f(r["consumption"]), "unit_rate": f(r["unit_rate"]),
+             "amount": f(r["amount"])} for r in rows]
 
 
 def _csrf_session(client: httpx.Client, base: str, service: str, client_no: str,
