@@ -11,6 +11,7 @@ import type { ViewKey } from "../components/AppShell";
 import { KPICard, Card, CardHead, CardBody, StatusChip, LoadingState } from "../components/premium";
 import type { Tone } from "../design-system/status";
 import { useScope } from "../stores/scope";
+import { useAuth } from "../stores/auth";
 
 const fmtDate = (s: string) => new Date(s).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
 const fmtShort = (s: string) => new Date(s).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
@@ -20,7 +21,9 @@ const inr = (v: number | null | undefined) => Number(v ?? 0).toLocaleString("en-
 type DayDetail = { pv: SapPreview; rows: SapRow[] };
 
 export default function SapPosting({ onNavigate }: { onNavigate: (v: ViewKey) => void }) {
-  const { range, user, setRange } = useScope();
+  const { range, setRange } = useScope();
+  // who to stamp on the posting = the actual signed-in user (NOT a hardcoded placeholder)
+  const postedBy = useAuth((s) => s.user?.name) ?? undefined;
   const single = range.start === range.end;
   const postDate = range.start;   // the day being posted (single-day flow)
 
@@ -104,7 +107,7 @@ export default function SapPosting({ onNavigate }: { onNavigate: (v: ViewKey) =>
   async function post() {
     setBusy(true);
     try {
-      const r = single ? await api.sapPost(range.start, user, force) : await api.sapPostRange(range.start, range.end, user, force);
+      const r = single ? await api.sapPost(range.start, postedBy, force) : await api.sapPostRange(range.start, range.end, postedBy, force);
       await loadSelected(postDate, overrideRate()); loadHist(); setDetail({});
       if (r.ok && r.posted) toast.success(`Posted ${r.posted} document(s) to SAP`, { description: r.skipped ? `${r.skipped} already-posted row(s) skipped.` : undefined });
       else if (r.ok) toast.info(r.reason ?? "Nothing to post", { description: "Enable “Re-post” to overwrite rows already posted." });

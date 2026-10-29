@@ -13,6 +13,7 @@ services:
       APP_PORT: 4040        # internal only — reached by the frontend nginx over the
       PGSSLMODE: disable     # pems network (backend:4040); the new PG has no SSL
       ROLLUP_IN_APP: "0"     # the dedicated `rollup` worker keeps the rollup fresh
+      TZ: Asia/Kolkata       # plant wall-clock (IST) — so posted_at / datetime.now() aren't UTC
     # No host port published: the backend is not exposed on the host — only the
     # frontend (:4040) is. Keeps PEMS to a single host port on the shared server.
     expose:
@@ -33,6 +34,7 @@ services:
       - .env
     environment:
       PGSSLMODE: disable
+      TZ: Asia/Kolkata       # match the backend / plant wall-clock (IST)
     command: ["python", "-m", "app.services.rollup", "--loop"]
     # This worker has no HTTP server, so the image's web healthcheck doesn't apply.
     healthcheck:

@@ -17,8 +17,6 @@ export interface DateRange {
 interface ScopeState {
   range: DateRange;
   plant: PlantKey;
-  /** current user — placeholder until a login/user system exists */
-  user: string;
   setRange: (r: DateRange) => void;
   setPlant: (p: PlantKey) => void;
 }
@@ -41,7 +39,6 @@ export const useScope = create<ScopeState>()(
     (set) => ({
       range: defaultRange(),
       plant: "all",
-      user: "Akash Yadav",
       setRange: (range) => set({ range }),
       setPlant: (plant) => set({ plant }),
     }),
@@ -50,7 +47,7 @@ export const useScope = create<ScopeState>()(
       // `range` is deliberately NOT persisted: every fresh load of the app should
       // default to today's data. Only picking a different range within a session
       // should show a different date — reopening/reloading the app resets to "Today".
-      partialize: (s) => ({ plant: s.plant, user: s.user }),
+      partialize: (s) => ({ plant: s.plant }),
     },
   ),
 );

@@ -8,6 +8,7 @@ import { api, type AuditRow, type ConstantRow, type MeterFactors, type Meter, ty
 import type { ViewKey } from "../components/AppShell";
 import { Card, CardHead, CardBody, StatusChip, LoadingState } from "../components/premium";
 import { cn } from "../lib/utils";
+import { useAuth } from "../stores/auth";
 
 const inp = "w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary";
 const lbl = "mb-1 block text-xs font-medium text-muted-foreground";
@@ -17,7 +18,9 @@ const fyStartIso = () => { const n = new Date(); const y = n.getMonth() >= 3 ? n
 const fmtDate = (iso: string) => new Date(iso + (iso.length === 10 ? "T00:00:00" : "")).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 const trimZeros = (s: string) => (s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s);
 const fmtNum = (v: number) => trimZeros(v.toLocaleString("en-IN", { maximumFractionDigits: 6 }));
-const ACTOR = "Akash Yadav";   // stamped as the change author in the audit log
+// change author stamped in the audit log = the actual signed-in user (read imperatively
+// from the auth store so it works in these module-level helpers), not a hardcoded name.
+const actor = () => useAuth.getState().user?.name ?? "system";
 
 // Versions arrive newest-effective-first. The one in force *today* is the latest
 // whose effective_from is on/before today; anything dated later is a future
@@ -294,7 +297,7 @@ function MeterFactorsCard() {
     const [d, f] = pick.split("|");
     setBusy(true);
     try {
-      setData(await api.saveMeterFactor({ device_id: d, feeder_id: Number(f), mult_factor: Number(newVal), effective_from: newDate, updated_by: ACTOR }));
+      setData(await api.saveMeterFactor({ device_id: d, feeder_id: Number(f), mult_factor: Number(newVal), effective_from: newDate, updated_by: actor() }));
       setPick(""); setNewVal(""); setNewDate(fyStartIso());
       toast.success("Meter factor added", { description: `×${trimZeros(Number(newVal).toFixed(6))} from ${fmtDate(newDate)}` });
     } catch (e) { toast.error("Save failed", { description: String(e) }); } finally { setBusy(false); }
@@ -350,13 +353,13 @@ function MeterFactorRow({ meter, onChange }: { meter: MeterFactors["meters"][num
     if (val.trim() === "" || isNaN(Number(val))) { toast.error("Enter a numeric factor"); return; }
     setBusy(true);
     try {
-      onChange(await api.saveMeterFactor({ device_id: dev, feeder_id: fid, mult_factor: Number(val), effective_from: date, updated_by: ACTOR }));
+      onChange(await api.saveMeterFactor({ device_id: dev, feeder_id: fid, mult_factor: Number(val), effective_from: date, updated_by: actor() }));
       setOpen(false);
       toast.success(`${meter.feeder_name ?? dev} factor updated`, { description: `×${trimZeros(Number(val).toFixed(6))} from ${fmtDate(date)}` });
     } catch (e) { toast.error("Save failed", { description: String(e) }); } finally { setBusy(false); }
   }
   async function removeVersion(effective_from: string) {
-    try { onChange(await api.deleteMeterFactor(dev, fid, effective_from, ACTOR)); toast.success("Version removed"); }
+    try { onChange(await api.deleteMeterFactor(dev, fid, effective_from, actor())); toast.success("Version removed"); }
     catch (e) { toast.error("Delete failed", { description: String(e) }); }
   }
 
@@ -424,7 +427,7 @@ function ConstantCard({ versions, onChange }: { versions: ConstantRow[]; onChang
     try {
       const updated = await api.saveConstant({
         ckey: current.ckey, label: current.label, category: current.category, unit: current.unit ?? undefined,
-        cvalue: Number(val), effective_from: date, note: note || undefined, updated_by: ACTOR,
+        cvalue: Number(val), effective_from: date, note: note || undefined, updated_by: actor(),
       });
       onChange(updated); setOpen(false); setNote("");
       toast.success(`${current.label} updated`, { description: `${fmtNum(Number(val))}${current.unit ? " " + current.unit : ""} effective ${fmtDate(date)}` });
@@ -433,7 +436,7 @@ function ConstantCard({ versions, onChange }: { versions: ConstantRow[]; onChang
 
   async function remove(id: number) {
     if (versions.length === 1) { toast.error("Can't delete the only version"); return; }
-    try { onChange(await api.deleteConstant(id, ACTOR)); toast.success("Version removed"); }
+    try { onChange(await api.deleteConstant(id, actor())); toast.success("Version removed"); }
     catch (e) { toast.error("Delete failed", { description: String(e) }); }
   }
 
@@ -528,7 +531,7 @@ function TariffCard({ tariffs, onChange }: { tariffs: TariffRow[]; onChange: (t:
   async function save() {
     setBusy(true);
     try {
-      const body: Partial<TariffRow> & { updated_by?: string } = { ...draft, updated_by: ACTOR };
+      const body: Partial<TariffRow> & { updated_by?: string } = { ...draft, updated_by: actor() };
       if (asNew) delete (body as { id?: number }).id;   // POST a new version
       const updated = await api.saveTariff(body);
       onChange(updated); setEditId(null); setAsNew(false);
@@ -629,7 +632,7 @@ function SystemRow({ row, onChange }: { row: SystemConfigRow; onChange: (r: Syst
     setBusy(true);
     try {
       const value = meter ? { device_id: dev, feeder_id: Number(fdr) } : val;
-      onChange(await api.saveSystemConfig(row.cfg_key, value, ACTOR));
+      onChange(await api.saveSystemConfig(row.cfg_key, value, actor()));
       setEdit(false);
       toast.success(`${row.label} saved`, { description: "Applies on the next backend restart." });
     } catch (e) { toast.error("Save failed", { description: String(e) }); } finally { setBusy(false); }
