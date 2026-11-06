@@ -56,6 +56,7 @@ export interface Executive {
   as_of: string | null;
   date?: string;
   range?: { start: string; end: string };
+  prev_range?: { start: string; end: string };
   live?: boolean;
   is_range?: boolean;
   demand: { kw: number; mw: number; kva: number; contract_kva: number; utilization_pct: number };

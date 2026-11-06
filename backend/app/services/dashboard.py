@@ -96,6 +96,10 @@ def executive(db: Session, start: str | None = None, end: str | None = None) -> 
         "as_of": latest.isoformat(),
         "date": (pend - timedelta(days=1)).date().isoformat(),
         "range": {"start": pstart.date().isoformat(), "end": (pend - timedelta(days=1)).date().isoformat()},
+        # the equal-length window immediately before `range`, used for the "vs prev period"
+        # comparison and the dashed line on the trend chart — surfaced so the UI can label it.
+        "prev_range": {"start": prev_start.date().isoformat(),
+                       "end": (pstart - timedelta(days=1)).date().isoformat()},
         "live": live,
         "is_range": is_range,
         "demand": {

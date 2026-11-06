@@ -84,7 +84,7 @@ export default function Dashboard() {
           footnote={<StatusChip tone={pfTone(d.power_factor)}>{pfLabel(d.power_factor)}</StatusChip>} />
         <KPICard label={d.is_range ? "Period Consumption" : d.live ? "Today's Consumption" : "Consumption"} tone="info" icon={<Activity size={17} />}
           value={d.consumption.today_mwh ?? 0} unit="MWh" decimals={1} spark={spark}
-          delta={d.consumption.change_pct} deltaSuffix={d.is_range ? "vs prev period" : d.live ? "vs yest" : "vs prev day"} deltaGoodWhenUp={false} />
+          delta={d.consumption.change_pct} deltaSuffix={d.is_range ? `vs ${fmtRange(d.prev_range)}` : d.live ? "vs yest" : "vs prev day"} deltaGoodWhenUp={false} />
         <KPICard label="Load Factor" tone="success" icon={<BatteryCharging size={17} />}
           value={d.load_factor ?? 0} decimals={2} footnote={<span>peak-adjusted, {d.is_range ? "this period" : d.live ? "today" : "that day"}</span>} />
         <KPICard label={d.is_range ? "Energy Cost (Period)" : d.live ? "Energy Cost (Today)" : "Energy Cost"} tone="warning" icon={<IndianRupee size={17} />}
@@ -102,7 +102,7 @@ export default function Dashboard() {
         <Card className="lg:col-span-2">
           <CardHead title={d.is_range ? "Daily Consumption Trend" : "24-Hour Demand Trend"} icon={<TrendingDown size={16} />}
             right={<span className="text-xs text-muted-foreground">
-              {d.is_range ? "MWh · This period vs previous period"
+              {d.is_range ? `MWh · ${fmtRange(d.range)} vs ${fmtRange(d.prev_range)}`
                 : d.live ? "MW · Today vs Yesterday"
                 : `MW · ${fmtShort(d.date!)} vs ${fmtShort(shiftIso(d.date!, -1))}`}
             </span>} />
@@ -178,8 +178,10 @@ function buildDemand(d: Executive, mode: "light" | "dark"): EChartsOption {
   const unit = isRange ? "MWh" : "MW";
   // For a single historical day, label the lines with the actual dates instead of
   // "Today"/"Yesterday" (which are only correct for the live/today view).
-  const curLabel = isRange ? "This period" : d.live ? "Today" : fmtShort(d.date);
-  const prevLabel = isRange ? "Previous period" : d.live ? "Yesterday" : fmtShort(shiftIso(d.date, -1));
+  // for a range, label each line with its actual dates so the dashed "previous period"
+  // line is self-explanatory (e.g. "26 Oct – 31 Oct") instead of a vague "Previous period".
+  const curLabel = isRange ? (d.range ? fmtRange(d.range) : "This period") : d.live ? "Today" : fmtShort(d.date);
+  const prevLabel = isRange ? (d.prev_range ? fmtRange(d.prev_range) : "Previous period") : d.live ? "Yesterday" : fmtShort(shiftIso(d.date, -1));
   return {
     grid: { left: 8, right: 12, top: 24, bottom: 4, containLabel: true },
     legend: { data: [curLabel, prevLabel], right: 0, top: 0, itemWidth: 14, itemHeight: 8, textStyle: { color: ax.text, fontSize: 11 } },
@@ -265,6 +267,7 @@ function timeOfDayGreeting(iso: string | null) {
 }
 function fmtDate(s: string) { return new Date(s).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); }
 function fmtShort(s: string | null | undefined) { return s ? new Date(s).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : ""; }
+function fmtRange(r?: { start: string; end: string }) { return r ? `${fmtShort(r.start)} – ${fmtShort(r.end)}` : ""; }
 // shift an ISO yyyy-mm-dd by N days, staying on local wall-clock (no TZ drift)
 function shiftIso(s: string | null | undefined, days: number) {
   if (!s) return "";
