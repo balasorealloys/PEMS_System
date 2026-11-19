@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Calculator, Database, FileText, Gauge, Network, Settings, Zap } from "lucide-react";
+import { ArrowDown, BookOpen, Calculator, Database, FileText, Gauge, Network, Settings, Sigma, Zap } from "lucide-react";
 import type { ViewKey } from "../components/AppShell";
 
 // User Guide — how to use PEMS, module by module. Written to be extended freely.
@@ -70,6 +70,26 @@ const Note = ({ children }: { children: React.ReactNode }) => (
   <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground">💡 {children}</div>
 );
 const K = ({ children }: { children: React.ReactNode }) => <b className="text-foreground">{children}</b>;
+// a labelled box + a down-arrow connector, for the data-flow chart
+const FlowBox = ({ tone, title, sub }: { tone: string; title: string; sub?: string }) => (
+  <div className={`rounded-xl border px-3 py-2.5 text-center ${tone}`}>
+    <div className="text-xs font-semibold text-foreground">{title}</div>
+    {sub && <div className="mt-0.5 text-[11px] text-muted-foreground">{sub}</div>}
+  </div>
+);
+const Arrow = ({ label }: { label?: string }) => (
+  <div className="flex flex-col items-center py-1 text-muted-foreground">
+    <ArrowDown size={14} />{label && <span className="mt-0.5 text-[10px]">{label}</span>}
+  </div>
+);
+// a formula card: metric name, the equation (mono), and a plain-English note
+const Formula = ({ name, eq, desc }: { name: string; eq: React.ReactNode; desc: React.ReactNode }) => (
+  <div className="rounded-lg border bg-background/50 p-3">
+    <div className="text-sm font-semibold text-foreground">{name}</div>
+    <div className="mt-1 font-mono text-[12.5px] leading-relaxed text-primary">{eq}</div>
+    <div className="mt-1 text-xs text-muted-foreground">{desc}</div>
+  </div>
+);
 
 const SECTIONS = (): Section[] => [
   {
@@ -89,6 +109,63 @@ const SECTIONS = (): Section[] => [
           <><K>Search (Ctrl K)</K>, live clock, theme toggle and fullscreen.</>,
         ]} />
         <Note>The status bar at the bottom is hidden by default — click the chevron handle at the bottom-right to show or hide it (your choice is remembered).</Note>
+      </>
+    ),
+  },
+  {
+    id: "calc", title: "How the Numbers Are Calculated", icon: <Sigma size={17} />,
+    body: (
+      <>
+        <p>Every figure in PEMS traces back to <K>one source — the 132 kV main incomer meter</K> (the same point TPNODL bills you on). <K>Instantaneous</K> values use the latest reading; <K>energy</K> uses the register difference. Here's the whole flow, then the exact formula behind each card.</p>
+
+        <H>Where every number comes from</H>
+        <div className="my-2 rounded-xl border bg-background/40 p-4">
+          <FlowBox tone="border-primary/30 bg-primary/10" title="132 kV Main Incomer Meter" sub="TPNODL metering point · readings every minute" />
+          <Arrow label="splits into two" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <FlowBox tone="border-amber-500/30 bg-amber-500/10" title="Latest reading — instantaneous" sub="kW · kVA · PF · Voltage · Frequency · THD" />
+              <Arrow />
+              <FlowBox tone="border-emerald-500/30 bg-emerald-500/10" title="Current Demand · Power Factor · Power Quality" sub="shown live on the dashboard" />
+            </div>
+            <div>
+              <FlowBox tone="border-blue-500/30 bg-blue-500/10" title="kWh / kVAh register (Final − Initial)" sub="= energy consumed over the period" />
+              <Arrow />
+              <FlowBox tone="border-blue-500/30 bg-blue-500/10" title="× meter factor → per-feeder MWh" sub="Energy Balance: Grid = Furnaces + Auxiliary" />
+              <Arrow />
+              <FlowBox tone="border-red-500/30 bg-red-500/10" title="Tariff engine" sub="LF slabs → ToD bands + demand/MMFC + duty" />
+              <Arrow />
+              <FlowBox tone="border-red-500/30 bg-red-500/10" title="Blended ₹/kWh" sub="→ Energy Cost · Expected Bill · SAP posting" />
+            </div>
+          </div>
+        </div>
+
+        <H>Dashboard cards — the formula behind each</H>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <Formula name="Current Demand (MW)" eq="latest kW ÷ 1000" desc={<>The most recent incomer reading. "% of 56 MVA" = latest kVA ÷ contract demand (56,000 kVA).</>} />
+          <Formula name="Power Factor" eq="kW ÷ kVA = cos φ" desc={<>Read straight from the meter (SYSTEM_PF). ≥ 0.99 Excellent, ≥ 0.95 Good.</>} />
+          <Formula name="Today's Consumption (MWh)" eq="(Final − Initial) kWh ÷ 1000" desc={<>Incomer register delta for the period. "% vs yesterday" compares the <K>same elapsed time</K> for a fair read while today is in progress.</>} />
+          <Formula name="Load Factor" eq="kWh ÷ (Peak kW × hours)" desc={<>Average load ÷ peak load (0–1). Near 1 = steady; low = peaky. The bill uses the kVAh/kVA version.</>} />
+          <Formula name="Energy Cost (Today)" eq="Σ(cost-centre kWh) × ₹/kWh" desc={<>Each cost centre's daily energy × the blended tariff rate — this is the amount posted to SAP.</>} />
+          <Formula name="Expected Monthly Bill" eq="full month-to-date tariff bill" desc={<>The whole MTD TPNODL bill rebuilt on the incomer (energy + ToD + demand + duty + fixed charges).</>} />
+        </div>
+
+        <H>Power Quality tile</H>
+        <Bullets items={[
+          <><K>Voltage (kV)</K> = average line-to-line voltage ÷ 1000.</>,
+          <><K>Frequency (Hz)</K> = direct meter reading.</>,
+          <><K>THD (V)</K> / <K>THD (I)</K> = average of the three phases (R, Y, B).</>,
+          <><K>Current Unbalance (%)</K> = max|phase − average| ÷ average × 100 across R/Y/B.</>,
+        ]} />
+
+        <H>The tariff engine (behind Energy Cost &amp; Expected Bill)</H>
+        <Steps items={[
+          <><K>Base rate</K> — load-factor blend: units up to 60% LF @ <K>₹5.80</K>, the excess above 60% LF @ <K>₹4.70</K>, blended into one ₹/kVAh.</>,
+          <><K>ToD bands</K> (baked into the energy charge, no separate line) — Normal @ base, <K>Peak @ base × 1.10</K>, <K>Solar @ base × 0.90</K>.</>,
+          <><K>Demand</K> = billable kVA × ₹250, prorated by days · <K>Electricity Duty</K> = 9% · + meter rent &amp; customer-service charge.</>,
+        ]} />
+
+        <Note>Every rate and factor (slab rates, ₹250 demand, 9% duty, ToD %, per-meter factors, 56 MVA contract) is a <K>date-effective constant</K> in Settings → Constants — never hard-coded. A tariff change is a new dated row, so past bills still reproduce exactly.</Note>
       </>
     ),
   },
@@ -159,7 +236,7 @@ const SECTIONS = (): Section[] => [
         ]} />
         <H>Constants &amp; Factors</H>
         <Bullets items={[
-          <>Every tariff constant the engines use lives here — <K>meter multiplication factor</K> (global + <K>per-meter overrides</K>), <K>contract demand</K>, <K>MMFC floor</K>, <K>ToD adders</K>, and the full <K>regulated tariff</K> (slab rates, demand charge, duty). Nothing is hard-coded.</>,
+          <>Every tariff constant the engines use lives here — <K>meter multiplication factor</K> (global + <K>per-meter overrides</K>), <K>contract demand</K>, <K>MMFC floor</K>, <K>ToD windows &amp; percentages</K>, and the full <K>regulated tariff</K> (slab rates, demand charge, duty). Nothing is hard-coded.</>,
           <><K>Date-effective.</K> Each value applies from its effective date forward. To change one, click <K>New value</K>, enter the number and the date it takes effect, and save — the old value stays in force for dates before it, so past bills reproduce exactly.</>,
           <>Expand <K>versions</K> to see the full history of any factor; the current one is tagged <K>in force</K>.</>,
           <>For the tariff, <K>Edit</K> corrects the current version, or <K>New version</K> schedules a change from a future date (e.g. a new OERC order).</>,
@@ -214,8 +291,9 @@ const SECTIONS = (): Section[] => [
           <><K>Load Factor</K> — kWh ÷ (Max Demand × hours); higher LF earns cheaper slab energy and a rebate.</>,
           <><K>Max Demand (MD)</K> — the highest 15-min block kVA in the month; drives the demand/MMFC charge.</>,
           <><K>Billable Demand</K> — max(MD, 80% of Contract Demand).</>,
-          <><K>ToD</K> — three periods by time of day: <K>Solar</K> (default 08–16 h, a rebate — cheap solar-generation hours), <K>Peak</K> (default 18–24 h, a surcharge), and <K>Normal</K> (all other hours, base rate). The window hours and the ₹/kVAh adders are editable in Settings → Constants → Time of Day.</>,
+          <><K>ToD (Time of Day)</K> — the energy rate shifts by time of day: <K>Solar</K> (08–16 h, <K>−10%</K> of the rate), <K>Peak</K> (18–24 h, <K>+10%</K>), and <K>Normal</K> (all other hours, the base rate). It's baked into the energy charge as three bands — no separate line. Windows and percentages are editable in Settings → Constants → Time of Day.</>,
           <><K>Blended rate</K> — total incomer bill ÷ kWh; applied to each cost centre's consumption for costing and SAP posting.</>,
+          <><K>Power Factor</K> — kW ÷ kVA (cos φ), read live from the incomer meter; ≥ 0.99 is excellent.</>,
         ]} />
         <Note>Numbers can differ from the Energy Master by ~1% when <K>em_valuedata</K> has gaps for a meter/month. If a month looks low, its raw data may need re-importing (<K>backfill_15min</K>).</Note>
       </>
